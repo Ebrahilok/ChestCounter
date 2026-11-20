@@ -50,6 +50,8 @@ ChestCounter reads the replays Fortnite saves of every match and keeps count of 
 - **Last 7 days**: a chart with each day's chests.
 - **Team** (with *Teammates* on): your chests and each teammate's in the current or last match, the team total and their share.
 - **Buttons**: **Overlay** (green dot = on), **Report** and **Settings**. With several accounts on the PC, a profile picker shows up at the top.
+- **Treasure Hours** (better treasure odds): the bottom card shows when the next one is, in your local time. On a day with one, a countdown appears next to the title; during the hour, the window, the overlay and the OBS page turn gold and the title counts down the time left.
+- **♥** (top right): a thank-you message, with the creator code **DOOFY**.
 
 The window can be resized and maximized: everything grows in proportion.
 

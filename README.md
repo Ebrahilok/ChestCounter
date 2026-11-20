@@ -50,6 +50,8 @@ ChestCounter lee las repeticiones (replays) que Fortnite guarda de cada partida 
 - **Últimos 7 días**: un gráfico con los cofres de cada día.
 - **Equipo** (con *Compañeros* activado): tus cofres y los de cada compañero en la partida actual o la última, el total del equipo y lo que aportan ellos.
 - **Botones**: **Overlay** (punto verde = activado), **Informe** y **Ajustes**. Si hay varias cuentas en el PC, arriba aparece un selector de perfil.
+- **Horas del tesoro** (más probabilidad de tesoros): la tarjeta de abajo dice cuándo es la próxima, en tu hora local. El día que hay una, junto al título aparece una cuenta atrás; durante la hora, la ventana, el overlay y la página de OBS se ponen dorados y el título cuenta el tiempo que queda.
+- **♥** (arriba a la derecha): un mensaje de agradecimiento, con el código de creador **DOOFY**.
 
 La ventana se puede redimensionar y maximizar: todo crece en proporción.
 
