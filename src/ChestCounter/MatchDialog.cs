@@ -131,7 +131,7 @@ public sealed class MatchDialog : Form
         }
 
         // ---- Token pirata: probabilidad en esta partida ------------------------------------------------------
-        if (row.OwnChestCount + row.TokenMateChests > 0)
+        if (row.OwnChestCount + row.TokenMateChests > 0 || row.TokenOwnerMates.Count > 0)
         {
             var oneIn = TokenOdds.OneInChests.ToString("#,0", L.Culture);
             var tk = Section(L.T("Token pirata", "Pirate token"), TokenOdds.Percent(row.TokenChance), Theme.Amber);
@@ -149,6 +149,10 @@ public sealed class MatchDialog : Form
             if (row.TokenHourChests > 0)
             {
                 Row(tk, L.F("★ {0} en la Hora del tesoro (×1,5)", "★ {0} during Treasure Hour (×1.5)", L.N(row.TokenHourChests)), "", Theme.Amber);
+            }
+            if (row.TokenOwnerMates.Count > 0)
+            {
+                Row(tk, L.F("Sin {0} (ya tienen el token)", "Without {0} (already have the token)",string.Join(", ", row.TokenOwnerMates)), "", Theme.Muted);
             }
             if (!row.TokenIncludesTeam && d.Mates is { Count: > 0 })
             {

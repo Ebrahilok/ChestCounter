@@ -20,7 +20,8 @@ public static class TokenOdds
     /// Con <paramref name="includeTeammates"/>, también los cofres que se vio abrir a los compañeros (los tesoros se
     /// comparten con el equipo). De esos no se sabe el segundo: cuentan ×1,5 si la mitad de la partida cae en la Hora del tesoro.
     /// </summary>
-    public static (double Chance, int HourChests, int MateChests) ForMatch(MatchRecord m, bool includeTeammates = false)
+    /// <param name="owners">Compañeros que ya tienen el token (ver <see cref="Config.TokenOwners"/>): sus cofres no cuentan.</param>
+    public static (double Chance, int HourChests, int MateChests) ForMatch(MatchRecord m, bool includeTeammates = false, IReadOnlyCollection<string>? owners = null)
     {
         var start = DateTime.SpecifyKind(m.MatchStartUtc ?? m.AnalyzedAtUtc, DateTimeKind.Utc);
         var miss = 1.0;
@@ -31,7 +32,7 @@ public static class TokenOdds
             if (inHour) hour++;
             miss *= 1 - PerChest(inHour);
         }
-        var mates = includeTeammates ? TeammateChests(m) : 0;
+        var mates = includeTeammates ? TeammateChests(m, owners) : 0;
         if (mates > 0)
         {
             var mateHour = TreasureHours.Active(start.AddSeconds((m.DurationSeconds ?? 0) / 2.0)) != null;
@@ -42,7 +43,16 @@ public static class TokenOdds
     }
 
     /// <summary>Cofres (sin cajas ni cañones) que se vio abrir a los compañeros en la partida.</summary>
-    public static int TeammateChests(MatchRecord m) => m.Teammates?.Sum(t => t.ChestsSeen) ?? 0;
+    public static int TeammateChests(MatchRecord m, IReadOnlyCollection<string>? owners = null) =>
+        m.Teammates?.Where(t => owners == null || !HasToken(t, owners)).Sum(t => t.ChestsSeen) ?? 0;
+
+    /// <summary>Clave guardada de un compañero en la lista «ya tiene el token»: su Epic id, o su nombre si no lo hay.</summary>
+    public static string OwnerKey(TeammateRecord t) => !string.IsNullOrEmpty(t.EpicId) ? t.EpicId : t.Name;
+
+    /// <summary>True si el compañero está en la lista (por Epic id o por nombre, sin mayúsculas).</summary>
+    public static bool HasToken(TeammateRecord t, IReadOnlyCollection<string> owners) => owners.Any(o =>
+        (!string.IsNullOrEmpty(t.EpicId) && string.Equals(o, t.EpicId, StringComparison.OrdinalIgnoreCase))
+        || string.Equals(o, t.Name, StringComparison.OrdinalIgnoreCase));
 
     public static double ForUntimedChests(int count) => 1 - Math.Pow(1 - PerChest(false), count);
 

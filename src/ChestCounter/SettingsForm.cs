@@ -139,8 +139,22 @@ public sealed class SettingsForm : Form
         var tokenTips = new ToolTip();
         foreach (var c in tokenRow) tokenTips.SetToolTip(c, tokenTip);
 
-        Lbl(teamCard, L.T("Solo cuenta lo registrado en tu replay.", "Only counts events recorded in your replay."),
-            7.5f, FontStyle.Regular, Theme.Muted, new Point(13, 164), new Size(LeftW - 26, 16));
+        // Quién ya tiene el token: sus cofres no suman (enlace que abre la lista de compañeros).
+        string OwnersText() => _monitor.Config.TokenOwners.Count == 0
+            ? L.T("Ya tienen el token: nadie · elegir…", "Already have the token: nobody · choose…")
+            : L.F("Ya tienen el token: {0} · cambiar…", "Already have the token: {0} · change…", L.N(_monitor.Config.TokenOwners.Count));
+        var ownersLink = Lbl(teamCard, OwnersText(), 7.5f, FontStyle.Bold, Theme.Cyan, new Point(13, 164), new Size(LeftW - 26, 16));
+        ownersLink.Cursor = Cursors.Hand;
+        tokenTips.SetToolTip(ownersLink, L.T("Marca a los compañeros que ya tienen el token: sus cofres dejan de sumar a tu probabilidad.",
+            "Mark the teammates who already have the token: their chests stop adding to your chance."));
+        ownersLink.Click += (_, _) =>
+        {
+            if (TokenOwnersDialog.Choose(this, _monitor.KnownTeammates(), _monitor.Config.TokenOwners) is { } chosen)
+            {
+                _monitor.SetTokenOwners(chosen);
+                ownersLink.Text = OwnersText();
+            }
+        };
 
         // Contar también como cofre: cajas de munición, de comida y cañones de botín (los cofres rotos cuentan siempre).
         var extras = AddCard(LeftX, 352, LeftW, 116, 16);

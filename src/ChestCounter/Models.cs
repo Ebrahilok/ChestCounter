@@ -233,6 +233,12 @@ public sealed class Config
     /// </summary>
     public bool TokenCountsTeammates { get; set; } = true;
 
+    /// <summary>
+    /// Compañeros que ya tienen el token (Epic id, o el nombre si no hay id): sus cofres no suman a tu probabilidad,
+    /// porque no pueden volver a sacarlo.
+    /// </summary>
+    public List<string> TokenOwners { get; set; } = new();
+
     /// <summary>Meta diaria de cofres (0 = sin meta). Se ve en la ventana (barra bajo «hoy») y en el overlay.</summary>
     public int DailyGoal { get; set; }
 
@@ -464,19 +470,70 @@ public sealed class Store
         catch (Exception ex)
         {
             // Keep a copy of the unreadable file rather than silently losing the history.
-            var backup = path + $".corrupt-{DateTime.Now:yyyyMMdd-HHmmss}";
-            File.Copy(path, backup, overwrite: true);
+            try
+            {
+                File.Copy(path, path + $".corrupt-{DateTime.Now:yyyyMMdd-HHmmss}", overwrite: true);
+            }
+            catch
+            {
+                // file locked: the error is still logged, and starting must not fail because of the copy
+            }
             ErrorLog.Write($"Archivo ilegible: {path}", ex);
 
             return null;
         }
     }
 
+    /// <summary>The window, the overlay and the watch thread all save: one write at a time (they share the .tmp file).</summary>
+    private static readonly object SaveGate = new();
+
     private static void Save<T>(string path, T value)
     {
-        var tmp = path + ".tmp";
-        File.WriteAllText(tmp, JsonSerializer.Serialize(value, Json));
-        File.Move(tmp, path, overwrite: true);
+        lock (SaveGate)
+        {
+            var tmp = path + ".tmp";
+            File.WriteAllText(tmp, JsonSerializer.Serialize(value, Json));
+            File.Move(tmp, path, overwrite: true);
+        }
+    }
+
+    public string BackupFolder => Path.Combine(Folder, "backups");
+
+    /// <summary>
+    /// Once a day, a copy of data.json in backups\ (the last <paramref name="keep"/> days are kept). data.json is the only
+    /// copy of the history once Fortnite deletes the replays. A file that does not parse is never copied over a good one.
+    /// </summary>
+    public void BackupDaily(int keep = 7)
+    {
+        try
+        {
+            if (!File.Exists(DataPath))
+            {
+                return;
+            }
+            var target = Path.Combine(BackupFolder, $"data-{DateTime.Now:yyyy-MM-dd}.json");
+            if (File.Exists(target))
+            {
+                return;
+            }
+            string text;
+            lock (SaveGate)
+            {
+                text = File.ReadAllText(DataPath);
+            }
+            using (JsonDocument.Parse(text)) { } // unreadable: keep the older copies instead
+            Directory.CreateDirectory(BackupFolder);
+            File.WriteAllText(target + ".tmp", text);
+            File.Move(target + ".tmp", target, overwrite: true);
+            foreach (var old in Directory.GetFiles(BackupFolder, "data-????-??-??.json").OrderByDescending(f => f, StringComparer.Ordinal).Skip(keep))
+            {
+                File.Delete(old);
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorLog.Write("Copia de seguridad diaria", ex);
+        }
     }
 }
 

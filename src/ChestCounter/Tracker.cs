@@ -307,14 +307,18 @@ public sealed class Tracker
         _store.SaveData(_data);
 
         // First match ever: its account becomes the profile.
-        if (string.IsNullOrEmpty(_config.Profile))
+        // The window changes the settings at the same time: same lock as Monitor (the Config object itself).
+        lock (_config)
         {
-            _config.Profile = Profiles.Key(record);
-            if (_config.InitialChests.Remove("", out var before) && !_config.InitialChests.ContainsKey(_config.Profile))
+            if (string.IsNullOrEmpty(_config.Profile))
             {
-                _config.InitialChests[_config.Profile] = before;
+                _config.Profile = Profiles.Key(record);
+                if (_config.InitialChests.Remove("", out var before) && !_config.InitialChests.ContainsKey(_config.Profile))
+                {
+                    _config.InitialChests[_config.Profile] = before;
+                }
+                try { _store.SaveConfig(_config); } catch { /* ignore */ }
             }
-            try { _store.SaveConfig(_config); } catch { /* ignore */ }
         }
 
         var newIds = _store.RegisterPrizeIds(record.AllTreasureFinds.Where(f => f.PrizeId != null).Select(f => f.PrizeId!));

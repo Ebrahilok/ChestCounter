@@ -116,6 +116,12 @@ internal static class Program
         Check(Math.Abs(TokenOdds.ForMatch(squad).Chance - TokenOdds.ForUntimedChests(27)) < 1e-12, "Token odds changed without teammates");
         var teamOdds = TokenOdds.ForMatch(squad, includeTeammates: true);
         Check(teamOdds.MateChests == 65 && Math.Abs(teamOdds.Chance - TokenOdds.ForUntimedChests(92)) < 1e-12, "Teammate chests not added to token odds");
+        var withoutA = TokenOdds.ForMatch(squad, includeTeammates: true, owners: new[] { "a" });
+        Check(withoutA.MateChests == 36 && Math.Abs(withoutA.Chance - TokenOdds.ForUntimedChests(63)) < 1e-12, "Teammate with the token still counted");
+        var backupStore = new Store(Path.Combine(output, "backup-test"));
+        backupStore.SaveData(new TrackerData());
+        backupStore.BackupDaily();
+        Check(Directory.GetFiles(backupStore.BackupFolder, "data-*.json").Length == 1, "Daily backup missing");
             using var emptyToken = new Bitmap(main.Width, main.Height);
             main.DrawToBitmap(emptyToken, new Rectangle(Point.Empty, emptyToken.Size));
             emptyToken.Save(Path.Combine(output, "main-token-empty.png"));

@@ -64,6 +64,13 @@ internal static class Program
         string? previewPath = null;
         for (var i = 0; i < args.Length; i++)
         {
+            if (args[i] is "--data" or "--demos" or "--lang" or "--overlay-preview" && i + 1 >= args.Length)
+            {
+                var missing = L.F("Falta el valor de {0} (ver --help).", "Missing value for {0} (see --help).", args[i]);
+                if (cliMode) Console.WriteLine("  " + missing);
+                else MessageBox.Show(missing, "ChestCounter", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return 1;
+            }
             switch (args[i])
             {
                 case "--data": dataDir = args[++i]; break;
@@ -169,6 +176,7 @@ internal static class Program
         LowerPriority();
         store.LoadPrizeNames();
         var data = store.LoadData();
+        store.BackupDaily();
         var tracker = new Tracker(store, config, data);
         // Antes de cualquier escaneo: si no, los replays se analizarían dos veces.
         var reanalyzing = tracker.UpgradeIfNeeded();
@@ -272,7 +280,8 @@ internal static class Program
         if ((monitor.RestartAfterUpdate || monitor.RestartRequested) && AppInfo.ExePath is { } newExe)
         {
             try { instance.ReleaseMutex(); } catch { }
-            var kept = args.Where(a => a != "--after-update").Select(a => a.Contains(' ') ? $"\"{a}\"" : a);
+            // Sin --reset-config: si no, el reinicio volvería a la bienvenida y perdería el idioma recién elegido.
+            var kept = args.Where(a => a is not ("--after-update" or "--reset-config")).Select(a => a.Contains(' ') ? $"\"{a}\"" : a);
             var restartArgs = string.Join(" ", monitor.RestartAfterUpdate ? kept.Append("--after-update") : kept);
             Process.Start(new ProcessStartInfo(newExe, restartArgs) { UseShellExecute = true })?.Dispose();
         }

@@ -69,6 +69,9 @@ public sealed record MatchRow(DateTime Start, string Mode, int Chests, int? Plac
     /// <summary>La probabilidad de token incluye los cofres de los compañeros (ajuste activado).</summary>
     public bool TokenIncludesTeam { get; init; }
 
+    /// <summary>Compañeros de esta partida que ya tienen el token: sus cofres no cuentan para la probabilidad.</summary>
+    public IReadOnlyList<string> TokenOwnerMates { get; init; } = Array.Empty<string>();
+
     /// <summary>Cofres de compañeros incluidos en <see cref="TokenChance"/> (0 con el ajuste desactivado).</summary>
     public int TokenMateChests { get; init; }
 
@@ -163,7 +166,8 @@ public sealed record DayChests(DateTime Day, int Chests);
 public sealed class Monitor
 {
     /// <summary>Protege solo la configuración (escrituras cortas desde la ventana, el overlay y el hilo de vigilancia).</summary>
-    private readonly object _cfgGate = new();
+    /// <summary>The Config object itself: Tracker locks it too when it saves the profile.</summary>
+    private readonly object _cfgGate;
     private readonly Store _store;
     private readonly Config _config;
     private readonly TrackerData _data;
@@ -186,6 +190,7 @@ public sealed class Monitor
     private DateTime? _autoCloseAt;
     private bool _closeRequested;
     private bool _treasureHour;
+    private DateTime _backupDay = DateTime.Now.Date; // la copia de hoy se hace al arrancar
 
     public Monitor(Store store, Config config, TrackerData data, Tracker tracker, string dataDir)
     {
@@ -194,6 +199,7 @@ public sealed class Monitor
         _data = data;
         _tracker = tracker;
         _dataDir = dataDir;
+        _cfgGate = config;
     }
 
     /// <summary>Ajustes actuales (leer; los cambios se hacen con <see cref="Change"/>).</summary>
@@ -322,6 +328,37 @@ public sealed class Monitor
     }
 
     /// <summary>Mostrar u ocultar la sección «Compañeros» del informe. Rehace el informe enseguida.</summary>
+    /// <summary>Compañeros que ya tienen el token (claves de <see cref="TokenOdds.OwnerKey"/>).</summary>
+    public void SetTokenOwners(IEnumerable<string> keys)
+    {
+        var list = keys.Where(k => !string.IsNullOrWhiteSpace(k)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        Change(c => c.TokenOwners = list);
+    }
+
+    /// <summary>
+    /// Compañeros con los que jugó el perfil mostrado (clave, último nombre, partidas juntos), los más frecuentes primero:
+    /// es lo que ofrece la lista «ya tienen el token».
+    /// </summary>
+    public IReadOnlyList<(string Key, string Name, int Matches)> KnownTeammates()
+    {
+        try
+        {
+            var key = Profiles.Current(_data, _config)?.Key;
+            return _data.Matches.ToList()
+                .Where(m => (key == null || Profiles.Key(m) == key) && m.Teammates != null)
+                .OrderByDescending(m => m.MatchStartUtc ?? m.AnalyzedAtUtc)
+                .SelectMany(m => m.Teammates!)
+                .GroupBy(TokenOdds.OwnerKey, StringComparer.OrdinalIgnoreCase)
+                .Select(g => (g.Key, g.First().Name, g.Count()))
+                .OrderByDescending(t => t.Item3)
+                .ToList();
+        }
+        catch (InvalidOperationException)
+        {
+            return Array.Empty<(string, string, int)>(); // la lista cambió mientras se leía
+        }
+    }
+
     public void SetShowTeammates(bool show)
     {
         _reportRequested = true;
@@ -573,6 +610,11 @@ public sealed class Monitor
                 _treasureHour = treasureHour;
                 changed = true;
             }
+            if (DateTime.Now.Date != _backupDay)
+            {
+                _backupDay = DateTime.Now.Date;
+                _store.BackupDaily(); // la app sigue abierta al cambiar de día
+            }
             if (_reportRequested)
             {
                 _reportRequested = false;
@@ -589,12 +631,27 @@ public sealed class Monitor
         }
     }
 
+    /// <summary>
+    /// The match in progress as shown, or null: only when it counts and belongs to the profile shown (a match on
+    /// another account must not be added to this one's figures).
+    /// </summary>
+    private MatchRecord? ShownLive()
+    {
+        var live = _tracker.LiveMatch;
+        if (live == null || !Profiles.Counted(live, _config))
+        {
+            return null;
+        }
+        var shown = Profiles.Current(_data, _config)?.Key;
+        return shown == null || Profiles.Key(live) == shown ? Profiles.Adjust(live, _config) : null;
+    }
+
     private void Publish()
     {
         var shown = Profiles.Current(_data, _config);
         _shownKey = shown?.Key;
         _shownName = shown?.Name;
-        var liveAdjusted = (_tracker.LiveMatch != null && Profiles.Counted(_tracker.LiveMatch, _config)) ? Profiles.Adjust(_tracker.LiveMatch, _config) : null;
+        var liveAdjusted = ShownLive();
         var profileView = Profiles.View(_data, _config);
         var initialChests = Profiles.InitialChests(_data, _config);
         // En curso aunque sus cifras aún no se puedan leer (Fortnite escribe la clave del replay al terminar la partida).
@@ -602,10 +659,11 @@ public sealed class Monitor
         var stats = BuildStats();
 
         var withMates = _config.TokenCountsTeammates;
+        var owners = _config.TokenOwners; // replaced (never changed in place) by SetTokenOwners: safe to read here
         var matchOdds = profileView.Matches
-            .Select(m => (Start: m.MatchStartUtc ?? m.AnalyzedAtUtc, TokenOdds.ForMatch(m, withMates).Chance))
+            .Select(m => (Start: m.MatchStartUtc ?? m.AnalyzedAtUtc, TokenOdds.ForMatch(m, withMates, owners).Chance))
             .ToList();
-        double? tokenLive = liveAdjusted != null && _tracker.IsLive ? TokenOdds.ForMatch(liveAdjusted, withMates).Chance : null;
+        double? tokenLive = liveAdjusted != null && _tracker.IsLive ? TokenOdds.ForMatch(liveAdjusted, withMates, owners).Chance : null;
         double? tokenLast = matchOdds.Count > 0 ? matchOdds.MaxBy(x => x.Start).Chance : null;
         var today = DateTime.Today;
         var liveToday = liveAdjusted is { } live && (live.MatchStartUtc ?? live.AnalyzedAtUtc).ToLocalTime().Date == today;
@@ -685,7 +743,7 @@ public sealed class Monitor
     private ChestStats BuildStats()
     {
         var matches = Profiles.View(_data, _config).Matches;
-        var live = _tracker.IsLive && _tracker.LiveMatch != null && Profiles.Counted(_tracker.LiveMatch, _config) ? Profiles.Adjust(_tracker.LiveMatch, _config) : null;
+        var live = _tracker.IsLive ? ShownLive() : null;
         var today = DateTime.Now.Date;
 
         var perDay = new Dictionary<DateTime, int>();
@@ -731,7 +789,7 @@ public sealed class Monitor
             return null;
         }
         var kinds = _config.ExtraKinds();
-        var live = _tracker.IsLive && _tracker.LiveMatch != null && Profiles.Counted(_tracker.LiveMatch, _config) ? Profiles.Adjust(_tracker.LiveMatch, _config) : null;
+        var live = _tracker.IsLive ? ShownLive() : null;
         var m = live ?? Profiles.View(_data, _config).Matches.OrderByDescending(x => x.MatchStartUtc ?? x.AnalyzedAtUtc).FirstOrDefault();
         if (m == null)
         {
@@ -763,7 +821,8 @@ public sealed class Monitor
         // Equipo visible con «Compañeros» o con «Sumar sus cofres a tu total».
         var team = _config.ShowTeammates || _config.CountTeammateChests;
         var withMates = _config.TokenCountsTeammates;
-        MatchRow Row(MatchRecord m, bool isLive) => RowWithOdds(m, isLive, TokenOdds.ForMatch(m, withMates));
+        var owners = _config.TokenOwners;
+        MatchRow Row(MatchRecord m, bool isLive) => RowWithOdds(m, isLive, TokenOdds.ForMatch(m, withMates, owners));
         MatchRow RowWithOdds(MatchRecord m, bool isLive, (double Chance, int HourChests, int MateChests) odds) => new(
             (m.MatchStartUtc ?? m.AnalyzedAtUtc).ToLocalTime(),
             Pretty.Playlist(m.Playlist),
@@ -782,6 +841,9 @@ public sealed class Monitor
             OwnTokens = m.TreasureFinds.Count(f => f.Scope == "own" && f.IsPirateToken),
             TeamTokens = m.AllTreasureFinds.Count(f => f.Scope == "team" && f.IsPirateToken),
             TokenIncludesTeam = withMates,
+            TokenOwnerMates = withMates && m.Teammates != null
+                ? m.Teammates.Where(t => TokenOdds.HasToken(t, owners)).Select(t => t.Name).ToList()
+                : Array.Empty<string>(),
             TokenChance = odds.Chance,
             TokenHourChests = odds.HourChests,
             TokenMateChests = odds.MateChests,
