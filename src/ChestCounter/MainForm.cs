@@ -198,8 +198,8 @@ public sealed class MainForm : Form
         // Clic: Estadísticas (ahí está la probabilidad de token completa).
         _pirateCard.Click += (_, _) => _statsButton?.PerformClick();
         _pirateLabel.Click += (_, _) => _statsButton?.PerformClick();
-        _tips.SetToolTip(_pirateLabel, L.F("Probabilidad de sacar el token de la Tienda pirata: 1 de cada {0} por cofre (×1,5 en la Hora del tesoro), con tus cofres. El total estimado trata cada entrada del contador como un cofre válido. Clic = Estadísticas.",
-            "Chance of getting the Pirate Shop token: 1 in {0} per chest (×1.5 during Treasure Hour), on your own chests. Overall estimates treat every counter entry as an eligible chest. Click = Stats.", TokenOdds.OneInChests.ToString("#,0", L.Culture)));
+        _tips.SetToolTip(_pirateLabel, L.F("Probabilidad de sacar el token de la Tienda pirata: 1 de cada {0} por cofre (×1,5 en la Hora del tesoro), con tus cofres y los de tus compañeros (se puede quitar en Ajustes). El total estimado trata cada entrada del contador como un cofre válido. Clic = Estadísticas.",
+            "Chance of getting the Pirate Shop token: 1 in {0} per chest (×1.5 during Treasure Hour), on your chests and your teammates' (can be turned off in Settings). Overall estimates treat every counter entry as an eligible chest. Click = Stats.", TokenOdds.OneInChests.ToString("#,0", L.Culture)));
         _tips.SetToolTip(_pirateTotals, _tips.GetToolTip(_pirateLabel));
         Controls.Add(_pirateCard);
 
@@ -561,7 +561,7 @@ public sealed class MainForm : Form
             ApplyFilter();
             return;
         }
-        var rows = _last?.Recent ?? Array.Empty<MatchRow>();
+        var rows = (_last?.Recent ?? Array.Empty<MatchRow>()).Where(r => !r.Pending).ToList();
         var menu = new ContextMenuStrip { Renderer = new DarkMenuRenderer(), BackColor = Theme.Panel, ForeColor = Theme.Ink, ShowImageMargin = false, Font = Theme.Text(9f) };
         ToolStripMenuItem Item(string text, Action act, bool enabled = true)
         {

@@ -133,16 +133,22 @@ public sealed class StatsDialog : Form
         // Con la tasa de 1/137.500 (×1,5 en la Hora del tesoro): lo que se esperaba frente a lo que salió.
         var expected = rows.Sum(r => r.TokenChance);
         var anyChance = TokenOdds.Combine(rows.Select(r => r.TokenChance));
+        // Con el ajuste «Token: contar cofres del equipo», la cuenta usa también los cofres y los tokens del equipo.
+        var mateChests = rows.Sum(r => r.TokenMateChests);
+        tokens += rows.Where(r => r.TokenIncludesTeam && r.OwnTokens == 0).Sum(r => r.TeamTokens);
+        var yourChests = mateChests > 0
+            ? L.F("tus {0} cofres + {1} de tus compañeros", "your {0} chests + {1} of your teammates'", L.N(chests), L.N(mateChests))
+            : L.F("tus {0} cofres", "your {0} chests", L.N(chests));
         b.Y += 2;
         Line(b, L.F("Tasa de Epic: 1 de cada {0}", "Epic rate: 1 in {0}", TokenOdds.OneInChests.ToString("#,0", L.Culture)),
             "1/" + TokenOdds.OneInChests.ToString("#,0", L.Culture), TokenOdds.Percent(rows.Count > 0 ? expected / rows.Count : 0), Theme.Amber);
         Note(b, (tokens == 0
-                ? L.F("Con tus {0} cofres tenías un {1} de sacar al menos un token (se esperaban {2}). Te han salido 0: es lo normal.",
-                    "With your {0} chests you had a {1} chance of at least one token ({2} expected). You got 0: that's normal.",
-                    L.N(chests), TokenOdds.Percent(anyChance), expected.ToString("0.###", L.Culture))
-                : L.F("Con tus {0} cofres tenías un {1} de sacar al menos un token (se esperaban {2}). Te han salido {3}: ¡{4} veces más de lo esperado!",
-                    "With your {0} chests you had a {1} chance of at least one token ({2} expected). You got {3}: {4} times more than expected!",
-                    L.N(chests), TokenOdds.Percent(anyChance), expected.ToString("0.###", L.Culture), L.N(tokens), (tokens / Math.Max(expected, 1e-9)).ToString("0", L.Culture)))
+                ? L.F("Con {0} tenías un {1} de sacar al menos un token (se esperaban {2}). Te han salido 0: es lo normal.",
+                    "With {0} you had a {1} chance of at least one token ({2} expected). You got 0: that's normal.",
+                    yourChests, TokenOdds.Percent(anyChance), expected.ToString("0.###", L.Culture))
+                : L.F("Con {0} tenías un {1} de sacar al menos un token (se esperaban {2}). Te han salido {3}: ¡{4} veces más de lo esperado!",
+                    "With {0} you had a {1} chance of at least one token ({2} expected). You got {3}: {4} times more than expected!",
+                    yourChests, TokenOdds.Percent(anyChance), expected.ToString("0.###", L.Culture), L.N(tokens), (tokens / Math.Max(expected, 1e-9)).ToString("0", L.Culture)))
             + " " + L.F("Para un 50 % de opciones harían falta unos {0} cofres.", "For a 50% chance you'd need about {0} chests.",
                 ((int)Math.Round(Math.Log(0.5) / Math.Log(1 - TokenOdds.PerChest(false)))).ToString("#,0", L.Culture)), Theme.Ink);
         Note(b, L.T("Epic publica la tasa por cofre y el multiplicador ×1,5 durante la Hora del tesoro.",

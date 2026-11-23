@@ -103,7 +103,7 @@ public sealed class Tracker
     }
 
     /// <summary>Result of the analysis of one replay.</summary>
-    private sealed record Outcome(MatchRecord? Match = null, bool Updated = false, string? Skipped = null, string? Error = null, List<string>? NewPrizeIds = null);
+    private sealed record Outcome(MatchRecord? Match = null, bool Updated = false, string? Skipped = null, string? Error = null, List<string>? NewPrizeIds = null, bool Deferred = false);
 
     /// <summary>
     /// One pass over the folder. Returns the number of new matches recorded. Several replays at once (replays left
@@ -161,6 +161,22 @@ public sealed class Tracker
             }
 
             var outcome = Process(file);
+            if (outcome.Deferred)
+            {
+                // A slow analysis is still running: nothing else can be parsed meanwhile. Try again at the next scan.
+                HasPending = true;
+                if (!batch)
+                {
+                    Console.ForegroundColor = ConsoleColor.DarkGray;
+                    Console.WriteLine(L.T("   El análisis tarda más de lo normal: sigue en segundo plano.", "   The analysis is taking longer than usual: it keeps going in the background."));
+                    Console.ResetColor();
+                }
+                break;
+            }
+            if (_liveFile == file.FullName)
+            {
+                ClearLive(); // final answer for the match in progress (counted, skipped or unreadable): drop the estimate
+            }
             outcomes.Add(outcome);
             if (!batch)
             {
@@ -170,9 +186,12 @@ public sealed class Tracker
 
         if (batch)
         {
-            bar!.Update(ready.Count);
+            bar!.Update(outcomes.Count);
             bar.Clear();
             ReportWriter.Progress = null;
+        }
+        if (batch && outcomes.Count > 0)
+        {
             PrintBatchSummary(outcomes);
             if (profilesBefore < 2 && Profiles.List(_data).Count >= 2)
             {
@@ -233,6 +252,10 @@ public sealed class Tracker
         {
             record = Analyze(file, ParseTimeout);
         }
+        catch (AnalysisBusyException)
+        {
+            return new Outcome(Deferred: true);
+        }
         catch (Exception ex)
         {
             var message = (ex as AggregateException)?.InnerException?.Message ?? ex.Message;
@@ -282,10 +305,6 @@ public sealed class Tracker
         _data.Matches.Add(record);
         _data.ProcessedFiles[key] = record.SessionId;
         _store.SaveData(_data);
-        if (_liveFile == file.FullName)
-        {
-            ClearLive(); // the final analysis replaces the live estimate
-        }
 
         // First match ever: its account becomes the profile.
         if (string.IsNullOrEmpty(_config.Profile))
@@ -394,9 +413,66 @@ public sealed class Tracker
         PrintNewPrizeIds(outcomes.Where(o => o.NewPrizeIds != null).SelectMany(o => o.NewPrizeIds!).ToList());
     }
 
-    /// <summary>Reads the file (even while Fortnite writes it) and parses it on a lowest-priority background thread.</summary>
+    /// <summary>Thrown when an earlier analysis is still running: the replay is tried again at the next scan (not an error).</summary>
+    private sealed class AnalysisBusyException : Exception
+    {
+        public AnalysisBusyException() : base("analysis still running") { }
+    }
+
+    /// <summary>An analysis that passed its time limit. A thread cannot be stopped, so it is left to finish.</summary>
+    private sealed class RunningAnalysis
+    {
+        public required Thread Worker;
+        public required string Path;
+        public required long Length;
+        public required string Key;
+        public required DateTime StartedUtc;
+        public MatchRecord? Result;
+        public Exception? Failure;
+    }
+
+    /// <summary>After this long, a running analysis is considered stuck: its replay is marked unreadable.</summary>
+    private static readonly TimeSpan StuckAnalysis = TimeSpan.FromMinutes(20);
+
+    private RunningAnalysis? _running;
+
+    /// <summary>A slow analysis is still running in the background (its replay is counted at a later scan).</summary>
+    public bool IsAnalyzing => _running?.Worker.IsAlive == true;
+
+    /// <summary>
+    /// Reads the file (even while Fortnite writes it) and parses it on a lowest-priority background thread.
+    /// The parser keeps shared static state (replay time, raw probe), so two analyses must never run at once: when one
+    /// passes <paramref name="timeout"/> it keeps running, nothing else is parsed meanwhile (<see cref="AnalysisBusyException"/>),
+    /// and its result is used when the same replay is scanned again.
+    /// </summary>
     private MatchRecord Analyze(FileInfo file, TimeSpan timeout)
     {
+        if (_running is { } running)
+        {
+            if (running.Worker.IsAlive)
+            {
+                if (DateTime.UtcNow - running.StartedUtc < StuckAnalysis)
+                {
+                    throw new AnalysisBusyException();
+                }
+                // Stuck: give up on that replay for good.
+                _data.ProcessedFiles[running.Key] = "error: " + L.T("análisis demasiado largo", "analysis took too long");
+                _store.SaveData(_data);
+                ErrorLog.Write($"Replay analysis stuck: {running.Path}", new TimeoutException());
+                _running = null;
+            }
+            else
+            {
+                _running = null;
+                ReleaseMemory();
+                if (running.Path == file.FullName && running.Length == file.Length)
+                {
+                    return Finish(running.Result, running.Failure);
+                }
+                // Finished for another replay (or the file changed since): read this one now.
+            }
+        }
+
         byte[] bytes;
         using (var fs = new FileStream(file.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
         {
@@ -404,19 +480,25 @@ public sealed class Tracker
             fs.ReadExactly(bytes);
         }
 
-        MatchRecord? result = null;
-        Exception? failure = null;
-        var worker = new Thread(() =>
+        var job = new RunningAnalysis
+        {
+            Worker = null!, Path = file.FullName, Length = bytes.Length, Key = FileKey(file), StartedUtc = DateTime.UtcNow,
+        };
+        job.Worker = new Thread(() =>
         {
             try
             {
                 using var ms = new MemoryStream(bytes, writable: false);
                 // The replays saved on a PC are those of its player: the replay owner is tracked (one profile per account).
-                result = new ReplayAnalyzer().Analyze(ms, file.Name, "");
+                job.Result = new ReplayAnalyzer().Analyze(ms, file.Name, "");
             }
             catch (Exception e)
             {
-                failure = e;
+                job.Failure = e;
+            }
+            finally
+            {
+                bytes = Array.Empty<byte>();
             }
         })
         {
@@ -424,18 +506,23 @@ public sealed class Tracker
             Priority = ThreadPriority.Lowest,
             Name = "ReplayAnalysis",
         };
-        worker.Start();
-        if (!worker.Join(timeout))
+        job.Worker.Start();
+        if (!job.Worker.Join(timeout))
         {
-            throw new TimeoutException(L.T("análisis demasiado largo", "analysis took too long"));
+            _running = job; // keeps running: its result is picked up at a later scan
+            throw new AnalysisBusyException();
         }
-        bytes = Array.Empty<byte>();
         ReleaseMemory();
-        if (failure != null)
+        return Finish(job.Result, job.Failure);
+
+        static MatchRecord Finish(MatchRecord? result, Exception? failure)
         {
-            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw(); // keep the original stack
+            if (failure != null)
+            {
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw(); // keep the original stack
+            }
+            return result!;
         }
-        return result!;
     }
 
     // ---- Live match ---------------------------------------------------------------------------

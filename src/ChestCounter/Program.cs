@@ -177,6 +177,12 @@ internal static class Program
         if (once)
         {
             tracker.Scan(ignoreQuietPeriod: true);
+            while (tracker.IsAnalyzing)
+            {
+                // Una partida lenta sigue analizándose: se espera a que termine y se sigue con las demás.
+                while (tracker.IsAnalyzing) Thread.Sleep(500);
+                tracker.Scan(ignoreQuietPeriod: true);
+            }
             ReportWriter.WriteAll(store, config, data);
             tracker.PrintSummary();
             Console.WriteLine(L.F("  Informe: {0}", "  Report: {0}", store.ReportPath));

@@ -110,6 +110,12 @@ internal static class Program
                 && totalsLabel.Text.Contains(TokenOdds.Percent(liveOdds.TokenAllTime))
                 && oddsLabel.Bottom <= totalsLabel.Top, "Match or cumulative token odds are missing");
             Check(Math.Abs(TokenOdds.ForUntimedChests(1) - TokenOdds.PerChest(false)) < 1e-12, "Initial chests should use the base rate");
+        var squad = new MatchRecord { MatchStartUtc = new DateTime(2026, 11, 2, 12, 0, 0, DateTimeKind.Utc), DurationSeconds = 1200,
+            Chests = Enumerable.Range(0, 27).Select(i => new ChestRecord { TimeSeconds = i * 10, Kind = ChestKinds.Normal }).ToList(),
+            Teammates = new() { new() { Name = "A", ChestsSeen = 29 }, new() { Name = "B", ChestsSeen = 23 }, new() { Name = "C", ChestsSeen = 13 } } };
+        Check(Math.Abs(TokenOdds.ForMatch(squad).Chance - TokenOdds.ForUntimedChests(27)) < 1e-12, "Token odds changed without teammates");
+        var teamOdds = TokenOdds.ForMatch(squad, includeTeammates: true);
+        Check(teamOdds.MateChests == 65 && Math.Abs(teamOdds.Chance - TokenOdds.ForUntimedChests(92)) < 1e-12, "Teammate chests not added to token odds");
             using var emptyToken = new Bitmap(main.Width, main.Height);
             main.DrawToBitmap(emptyToken, new Rectangle(Point.Empty, emptyToken.Size));
             emptyToken.Save(Path.Combine(output, "main-token-empty.png"));

@@ -126,11 +126,21 @@ public sealed class SettingsForm : Form
             _monitor.SetCountTeammates(addMates.Checked);
         };
 
-        var addTreasures = AddToggleRow(teamCard, L.T("Sumar tesoros del equipo", "Include team treasures"), null, 107, config.CountTeammateTreasures);
+        var addTreasures = AddToggleRow(teamCard, L.T("Sumar tesoros del equipo", "Include team treasures"), null, 104, config.CountTeammateTreasures);
         addTreasures.CheckedChanged += (_, _) => { if (!_loading) _monitor.SetCountExtra(c => c.CountTeammateTreasures = addTreasures.Checked); };
 
-        Lbl(teamCard, L.T("Solo cuenta lo registrado en tu replay.\nEl aviso de token siempre está visible.", "Only counts events recorded in your replay.\nThe token status is always visible."),
-            7.5f, FontStyle.Regular, Theme.Muted, new Point(13, 144), new Size(LeftW - 26, 30));
+        // Probabilidad de token con los cofres del equipo: desactivar si tus compañeros ya tienen el token.
+        var before = teamCard.Controls.Count;
+        var tokenMates = AddToggleRow(teamCard, L.T("Token: contar cofres del equipo", "Token odds: count team chests"), null, 135, config.TokenCountsTeammates);
+        var tokenRow = teamCard.Controls.Cast<Control>().Skip(before).ToList();
+        tokenMates.CheckedChanged += (_, _) => { if (!_loading) _monitor.Change(c => c.TokenCountsTeammates = tokenMates.Checked); };
+        var tokenTip = L.T("El token se comparte con el equipo: sus cofres también te dan opciones. Desactívalo si tus compañeros ya tienen el token (no pueden volver a sacarlo).",
+            "The token is shared with your team, so their chests give you chances too. Turn it off if your teammates already have the token (they can't get it again).");
+        var tokenTips = new ToolTip();
+        foreach (var c in tokenRow) tokenTips.SetToolTip(c, tokenTip);
+
+        Lbl(teamCard, L.T("Solo cuenta lo registrado en tu replay.", "Only counts events recorded in your replay."),
+            7.5f, FontStyle.Regular, Theme.Muted, new Point(13, 164), new Size(LeftW - 26, 16));
 
         // Contar también como cofre: cajas de munición, de comida y cañones de botín (los cofres rotos cuentan siempre).
         var extras = AddCard(LeftX, 352, LeftW, 116, 16);

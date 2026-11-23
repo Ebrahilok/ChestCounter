@@ -15,8 +15,12 @@ public static class TokenOdds
 
     public static double PerChest(bool treasureHour) => (treasureHour ? TreasureHourBoost : 1.0) / OneInChests;
 
-    /// <summary>Probabilidad de al menos un token en una partida, cofre a cofre (sus cofres en la Hora del tesoro, ×1,5).</summary>
-    public static (double Chance, int HourChests) ForMatch(MatchRecord m)
+    /// <summary>
+    /// Probabilidad de al menos un token en una partida, cofre a cofre (sus cofres en la Hora del tesoro, ×1,5).
+    /// Con <paramref name="includeTeammates"/>, también los cofres que se vio abrir a los compañeros (los tesoros se
+    /// comparten con el equipo). De esos no se sabe el segundo: cuentan ×1,5 si la mitad de la partida cae en la Hora del tesoro.
+    /// </summary>
+    public static (double Chance, int HourChests, int MateChests) ForMatch(MatchRecord m, bool includeTeammates = false)
     {
         var start = DateTime.SpecifyKind(m.MatchStartUtc ?? m.AnalyzedAtUtc, DateTimeKind.Utc);
         var miss = 1.0;
@@ -27,8 +31,18 @@ public static class TokenOdds
             if (inHour) hour++;
             miss *= 1 - PerChest(inHour);
         }
-        return (1 - miss, hour);
+        var mates = includeTeammates ? TeammateChests(m) : 0;
+        if (mates > 0)
+        {
+            var mateHour = TreasureHours.Active(start.AddSeconds((m.DurationSeconds ?? 0) / 2.0)) != null;
+            if (mateHour) hour += mates;
+            miss *= Math.Pow(1 - PerChest(mateHour), mates);
+        }
+        return (1 - miss, hour, mates);
     }
+
+    /// <summary>Cofres (sin cajas ni cañones) que se vio abrir a los compañeros en la partida.</summary>
+    public static int TeammateChests(MatchRecord m) => m.Teammates?.Sum(t => t.ChestsSeen) ?? 0;
 
     public static double ForUntimedChests(int count) => 1 - Math.Pow(1 - PerChest(false), count);
 

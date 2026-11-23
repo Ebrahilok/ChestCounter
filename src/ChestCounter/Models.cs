@@ -227,6 +227,12 @@ public sealed class Config
     public bool CountTeammateChests { get; set; }
     public bool CountTeammateTreasures { get; set; }
 
+    /// <summary>
+    /// La probabilidad de token incluye los cofres que se vio abrir a los compañeros (activado por defecto: los tesoros
+    /// se comparten con el equipo). Se desactiva cuando los compañeros ya tienen el token y no pueden volver a sacarlo.
+    /// </summary>
+    public bool TokenCountsTeammates { get; set; } = true;
+
     /// <summary>Meta diaria de cofres (0 = sin meta). Se ve en la ventana (barra bajo «hoy») y en el overlay.</summary>
     public int DailyGoal { get; set; }
 

@@ -131,19 +131,36 @@ public sealed class MatchDialog : Form
         }
 
         // ---- Token pirata: probabilidad en esta partida ------------------------------------------------------
-        if (row.OwnChestCount > 0)
+        if (row.OwnChestCount + row.TokenMateChests > 0)
         {
+            var oneIn = TokenOdds.OneInChests.ToString("#,0", L.Culture);
             var tk = Section(L.T("Token pirata", "Pirate token"), TokenOdds.Percent(row.TokenChance), Theme.Amber);
             Row(tk, L.F("Probabilidad en esta partida ({0})", "Chance in this match ({0})", TokenOdds.OneIn(row.TokenChance)), TokenOdds.Percent(row.TokenChance), Theme.Ink);
-            Row(tk, L.F("{0} cofres × 1 de cada {1}", "{0} chests × 1 in {1}", L.N(row.OwnChestCount), TokenOdds.OneInChests.ToString("#,0", L.Culture)), "", Theme.Muted);
+            if (row.TokenMateChests > 0)
+            {
+                var all = row.OwnChestCount + row.TokenMateChests;
+                Row(tk, L.F("{0} cofres × 1 de cada {1}", "{0} chests × 1 in {1}", L.N(all), oneIn), "", Theme.Muted);
+                Row(tk, L.F("tuyos {0} + compañeros {1}+", "yours {0} + teammates {1}+", L.N(row.OwnChestCount), L.N(row.TokenMateChests)), "", Theme.Muted, indent: true);
+            }
+            else
+            {
+                Row(tk, L.F("{0} cofres × 1 de cada {1}", "{0} chests × 1 in {1}", L.N(row.OwnChestCount), oneIn), "", Theme.Muted);
+            }
             if (row.TokenHourChests > 0)
             {
                 Row(tk, L.F("★ {0} en la Hora del tesoro (×1,5)", "★ {0} during Treasure Hour (×1.5)", L.N(row.TokenHourChests)), "", Theme.Amber);
             }
+            if (!row.TokenIncludesTeam && d.Mates is { Count: > 0 })
+            {
+                Row(tk, L.T("Sin los cofres de tus compañeros (Ajustes)", "Without your teammates' chests (Settings)"), "", Theme.Muted);
+            }
+            var teamGot = row.TokenIncludesTeam && row.TeamTokens > 0;
             Row(tk, row.OwnTokens > 0
                     ? L.T("Resultado: ★ ¡te salió el token!", "Result: ★ you got the token!")
-                    : L.T("Resultado: no salió (lo normal con esta probabilidad)", "Result: no token (as expected at these odds)"),
-                "", row.OwnTokens > 0 ? Theme.Amber : Theme.Muted);
+                    : teamGot
+                        ? L.T("Resultado: ★ ¡le salió el token a tu equipo!", "Result: ★ your team got the token!")
+                        : L.T("Resultado: no salió (lo normal con esta probabilidad)", "Result: no token (as expected at these odds)"),
+                "", row.OwnTokens > 0 || teamGot ? Theme.Amber : Theme.Muted);
             EndSection(tk);
         }
 

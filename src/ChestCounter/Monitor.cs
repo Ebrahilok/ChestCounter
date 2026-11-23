@@ -51,6 +51,9 @@ public sealed record MatchRow(DateTime Start, string Mode, int Chests, int? Plac
     /// <summary>Cofres como cuentan en el total (con las cajas y, si está activado, los de los compañeros).</summary>
     public int Counted { get; init; }
 
+    /// <summary>Partida en curso cuyas cifras aún no se pueden leer: no tiene detalle ni cuenta como partida.</summary>
+    public bool Pending { get; init; }
+
     /// <summary>Solo cofres (sin cajas) que abriste o rompiste tú: la base para la probabilidad de tesoros.</summary>
     public int OwnChestCount { get; init; }
 
@@ -60,7 +63,16 @@ public sealed record MatchRow(DateTime Start, string Mode, int Chests, int? Plac
     /// <summary>Tokens de la Tienda pirata que te salieron a ti.</summary>
     public int OwnTokens { get; init; }
 
-    /// <summary>Probabilidad de token en esta partida con tus cofres (ver <see cref="TokenOdds"/>).</summary>
+    /// <summary>Tokens de la Tienda pirata que le salieron a un compañero.</summary>
+    public int TeamTokens { get; init; }
+
+    /// <summary>La probabilidad de token incluye los cofres de los compañeros (ajuste activado).</summary>
+    public bool TokenIncludesTeam { get; init; }
+
+    /// <summary>Cofres de compañeros incluidos en <see cref="TokenChance"/> (0 con el ajuste desactivado).</summary>
+    public int TokenMateChests { get; init; }
+
+    /// <summary>Probabilidad de token en esta partida con tus cofres y, si está activado, los de tus compañeros.</summary>
     public double TokenChance { get; init; }
 
     /// <summary>Cofres de esta partida abiertos durante una Hora del tesoro (×1,5).</summary>
@@ -585,13 +597,15 @@ public sealed class Monitor
         var liveAdjusted = (_tracker.LiveMatch != null && Profiles.Counted(_tracker.LiveMatch, _config)) ? Profiles.Adjust(_tracker.LiveMatch, _config) : null;
         var profileView = Profiles.View(_data, _config);
         var initialChests = Profiles.InitialChests(_data, _config);
-        var view = OverlayModel.Build(profileView, liveAdjusted, _tracker.IsLive && liveAdjusted != null, initialChests);
+        // En curso aunque sus cifras aún no se puedan leer (Fortnite escribe la clave del replay al terminar la partida).
+        var view = OverlayModel.Build(profileView, liveAdjusted, _tracker.IsLive, initialChests);
         var stats = BuildStats();
 
+        var withMates = _config.TokenCountsTeammates;
         var matchOdds = profileView.Matches
-            .Select(m => (Start: m.MatchStartUtc ?? m.AnalyzedAtUtc, TokenOdds.ForMatch(m).Chance))
+            .Select(m => (Start: m.MatchStartUtc ?? m.AnalyzedAtUtc, TokenOdds.ForMatch(m, withMates).Chance))
             .ToList();
-        double? tokenLive = liveAdjusted != null && _tracker.IsLive ? TokenOdds.ForMatch(liveAdjusted).Chance : null;
+        double? tokenLive = liveAdjusted != null && _tracker.IsLive ? TokenOdds.ForMatch(liveAdjusted, withMates).Chance : null;
         double? tokenLast = matchOdds.Count > 0 ? matchOdds.MaxBy(x => x.Start).Chance : null;
         var today = DateTime.Today;
         var liveToday = liveAdjusted is { } live && (live.MatchStartUtc ?? live.AnalyzedAtUtc).ToLocalTime().Date == today;
@@ -604,8 +618,10 @@ public sealed class Monitor
             .Append(TokenOdds.ForUntimedChests(initialChests)));
         // The full counter can include teammates and other containers. Treat those extra counts
         // as base-rate chests for the counter-based estimate, since their opening times are unknown.
-        var extraCount = profileView.Matches.Sum(m => m.ChestsOpened - m.Chests.Count)
-            + (tokenLive.HasValue && liveAdjusted is { } active ? active.ChestsOpened - active.Chests.Count : 0);
+        // Teammates' chests already in the per-match odds (setting on) must not be counted a second time here.
+        int Untimed(MatchRecord m) => m.ChestsOpened - m.Chests.Count - (withMates && m.TeammatesAdded > 0 ? TokenOdds.TeammateChests(m) : 0);
+        var extraCount = profileView.Matches.Sum(Untimed)
+            + (tokenLive.HasValue && liveAdjusted is { } active ? Untimed(active) : 0);
         var tokenOverall = TokenOdds.Combine(new[] { tokenAllTime, TokenOdds.ForUntimedChests(Math.Max(0, extraCount)) });
         if (initialChests > 0 || matchOdds.Count > 0 || tokenLive.HasValue)
         {
@@ -647,7 +663,7 @@ public sealed class Monitor
             Team = BuildTeam(),
             PirateTokenLive = liveAdjusted?.PirateTokenSeen == true,
             TokenDetails = BuildTokenDetails(liveAdjusted),
-            Recent = BuildRecent(liveAdjusted != null && _tracker.IsLive ? liveAdjusted : null),
+            Recent = BuildRecent(liveAdjusted != null && _tracker.IsLive ? liveAdjusted : null, _tracker.IsLive),
             CheckedUtc = _checkedUtc,
             Refreshing = _refreshRequested,
             RefreshResult = _refreshResult,
@@ -741,12 +757,14 @@ public sealed class Monitor
     }
 
     /// <summary>Partidas del perfil mostrado para la lista de la ventana: la partida en curso arriba y luego las 50 últimas.</summary>
-    private List<MatchRow> BuildRecent(MatchRecord? live)
+    private List<MatchRow> BuildRecent(MatchRecord? live, bool inProgress)
     {
         var kinds = _config.ExtraKinds();
         // Equipo visible con «Compañeros» o con «Sumar sus cofres a tu total».
         var team = _config.ShowTeammates || _config.CountTeammateChests;
-        MatchRow Row(MatchRecord m, bool isLive) => new(
+        var withMates = _config.TokenCountsTeammates;
+        MatchRow Row(MatchRecord m, bool isLive) => RowWithOdds(m, isLive, TokenOdds.ForMatch(m, withMates));
+        MatchRow RowWithOdds(MatchRecord m, bool isLive, (double Chance, int HourChests, int MateChests) odds) => new(
             (m.MatchStartUtc ?? m.AnalyzedAtUtc).ToLocalTime(),
             Pretty.Playlist(m.Playlist),
             m.OwnChests, // siempre solo lo tuyo: con «Sumar sus cofres», ChestsOpened ya incluye a los compañeros
@@ -762,14 +780,22 @@ public sealed class Monitor
             OwnChestCount = m.Chests.Count,
             OwnTreasures = m.TreasureFinds.Count(f => f.Scope == "own"),
             OwnTokens = m.TreasureFinds.Count(f => f.Scope == "own" && f.IsPirateToken),
-            TokenChance = TokenOdds.ForMatch(m).Chance,
-            TokenHourChests = TokenOdds.ForMatch(m).HourChests,
+            TeamTokens = m.AllTreasureFinds.Count(f => f.Scope == "team" && f.IsPirateToken),
+            TokenIncludesTeam = withMates,
+            TokenChance = odds.Chance,
+            TokenHourChests = odds.HourChests,
+            TokenMateChests = odds.MateChests,
             Detail = BuildDetail(m, kinds),
         };
         var rows = new List<MatchRow>();
         if (live != null)
         {
             rows.Add(Row(live, true));
+        }
+        else if (inProgress)
+        {
+            // Partida grabándose sin cifras todavía: una fila «En curso» (sus cofres se cuentan al terminar).
+            rows.Add(new MatchRow(DateTime.Now, L.T("se cuenta al terminar", "counted when it ends"), 0, null, null, null, 0, true, false, null) { Pending = true });
         }
         rows.AddRange(Profiles.View(_data, _config).Matches
             .OrderByDescending(x => x.MatchStartUtc ?? x.AnalyzedAtUtc)

@@ -52,7 +52,7 @@ public sealed class MatchList : Control
         foreach (var day in rows.GroupBy(r => r.Start.Date)) // las filas ya vienen de la más nueva a la más antigua
         {
             var list = day.ToList();
-            items.Add(new Item(null, day.Key, list.Count, list.Sum(r => r.Counted)));
+            items.Add(new Item(null, day.Key, list.Count(r => !r.Pending), list.Sum(r => r.Counted))); // la partida sin cifras aún no cuenta
             items.AddRange(list.Select(r => new Item(r, day.Key, 0, 0)));
         }
         _items = items;
@@ -113,7 +113,7 @@ public sealed class MatchList : Control
     protected override void OnMouseUp(MouseEventArgs e)
     {
         var i = ItemAt(e.Y);
-        if (e.Button == MouseButtons.Left && i >= 0 && i == _pressed && _items[i].Row is { } row)
+        if (e.Button == MouseButtons.Left && i >= 0 && i == _pressed && _items[i].Row is { Pending: false } row)
         {
             _tip.Hide(this);
             RowClicked?.Invoke(row);
@@ -146,7 +146,7 @@ public sealed class MatchList : Control
     private void UpdateHover(Point p)
     {
         var i = ItemAt(p.Y);
-        var hover = i >= 0 && _items[i].Row != null ? i : -1;
+        var hover = i >= 0 && _items[i].Row is { Pending: false } ? i : -1;
         Cursor = hover >= 0 ? Cursors.Hand : Cursors.Default;
         if (hover != _hover)
         {
@@ -296,7 +296,7 @@ public sealed class MatchList : Control
                 TextRenderer.DrawText(g, teamText, fontSmall, new Rectangle(chestLeft - lineH * 3, (int)(y + rowH * 0.6f), bigW + lineH * 3, lineH + 2),
                     Theme.Muted, TextFormatFlags.Right | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
             }
-            TextRenderer.DrawText(g, L.N(r.Chests), fontBig, bigRect, chestColor, TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
+            TextRenderer.DrawText(g, r.Pending ? "…" : L.N(r.Chests), fontBig, bigRect, chestColor, TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
             var marks = (r.PirateToken ? "★ " : "") + (r.Treasures > 0 ? OverlayModel.TreasureIcon + (r.Treasures > 1 ? L.N(r.Treasures) : "") : "");
             if (marks.Length > 0)
             {
