@@ -4,21 +4,40 @@
 
 # Contador de cofres de Fortnite
 
-[![version](https://img.shields.io/github/v/release/xdoofy92/ChestCounter?style=flat-square&label=versión&color=e8b04b)](../../releases/latest) [![descargas](https://img.shields.io/github/downloads/xdoofy92/ChestCounter/total?style=flat-square&label=descargas&color=e8b04b)](../../releases) ![Windows 10 | 11](https://img.shields.io/badge/Windows-10%20%7C%2011-3a7bd5?style=flat-square) [![licencia](https://img.shields.io/github/license/xdoofy92/ChestCounter?style=flat-square&label=licencia&color=555)](LICENSE)
+[![version](https://img.shields.io/github/v/release/Ebrahilok/ChestCounter?style=flat-square&label=versión&color=e8b04b)](../../releases/latest) [![descargas](https://img.shields.io/github/downloads/Ebrahilok/ChestCounter/total?style=flat-square&label=descargas&color=e8b04b)](../../releases) ![Windows 10 | 11](https://img.shields.io/badge/Windows-10%20%7C%2011-3a7bd5?style=flat-square) [![licencia](https://img.shields.io/github/license/Ebrahilok/ChestCounter?style=flat-square&label=licencia&color=555)](LICENSE)
 
 **Cuenta cada cofre que abres en Fortnite, partida tras partida: ventana, informe, overlay sobre el juego y los cofres de tu equipo.**
 
 <img src="docs/main.png" alt="Ventana principal" width="49%">&nbsp;<img src="docs/report-hero.png" alt="Informe" width="49%">
 
-[**⬇ Descargar ChestCounter.exe**](../../releases/latest) · Windows 10 / 11 · gratis · sin instalación · 10 idiomas
+[**⬇ Descargar la última versión**](../../releases/latest) · Windows 10 / 11 · gratis · sin instalación · 10 idiomas
 
 </div>
 
 ---
 
+> [!NOTE]
+> **Esto es un fork.** El proyecto original es [**xdoofy92/ChestCounter**](https://github.com/xdoofy92/ChestCounter), creado por **Doofy**: el análisis de los replays, el overlay, los tesoros y casi todo lo demás es trabajo suyo. Este fork, de [**Ebrahilok**](https://github.com/Ebrahilok), cambia sobre todo **la interfaz**.
+
+## Por qué este fork
+
+Juego muchas partidas y la herramienta contaba bien los cofres, pero la ventana principal me resultaba **confusa**: había más de diez cifras con el mismo peso, algunos datos salían repetidos (la última partida aparecía dos veces; total, sesión y hoy se mezclaban) y lo que más me interesaba, **cuántos cofres abrí en cada partida y quién abrió qué**, no se veía en la app: había que abrir el informe en el navegador. Tampoco se sabía cuándo se había actualizado por última vez ni había forma de forzarlo. Y con **Smart App Control** de Windows activado, el exe no se podía abrir de ninguna manera.
+
+Qué cambia respecto al original:
+
+- **La lista de partidas es el centro de la ventana**: la más reciente arriba (la que estás jugando, en verde), con cuándo, modo, puesto, eliminaciones y tus cofres en grande. Se ven **todas** las partidas guardadas, no solo las últimas.
+- **Clic en una partida → detalle dentro de la app**: tus cofres por tipo (normal, raro, enterrado…), los que rompiste, cajas de munición y comida, **lo que abrió cada compañero** y los tesoros con quién los consiguió. El informe HTML solo se abre con su botón.
+- **Botón ⟳ Actualizar** (busca partidas nuevas al momento) y el texto **«Actualizado hace X»**.
+- **Resumen con solo cuatro cifras**: total, hoy, media y tesoros. Los récords y el equipo van en la columna derecha.
+- **«≥ 36» pasa a «36+»**, explicado: es un mínimo porque tu replay solo tiene lo que pasa cerca de ti.
+- **Informe**: abre en **Partidas**, muestra todo el historial (antes las 100 últimas) y dice hace cuánto se actualizaron los datos.
+- El gráfico de 7 días ya no corta las cifras de 4 dígitos (2016 se leía «201»).
+- **Versión en carpeta (zip)** para quien tiene Smart App Control: el exe de un solo archivo no está firmado y Smart App Control lo bloquea sin opción de abrirlo.
+- Las actualizaciones automáticas vienen de **este** repositorio, no del original.
+
 ChestCounter lee las repeticiones (replays) que Fortnite guarda de cada partida y lleva la cuenta de los cofres que abres, de los **tesoros de la caza del tesoro** y, si quieres, de los cofres de tus **compañeros de equipo**. Todo se guarda en tu PC: aunque Fortnite borre los replays, tu historial se conserva.
 
-- **Ventana principal**: total, última partida, hoy, mejor día, media, récord, tesoros, gráfico de 7 días y tu equipo.
+- **Ventana principal**: la lista de tus partidas con los cofres de cada una y, al hacer clic, quién abrió qué.
 - **Informe** en el navegador, con pestañas: resumen, cofres, tesoros, partidas y compañeros.
 - **Overlay** sobre el juego y **página para OBS**.
 - **Compañeros**: con quién juegas, victorias juntos, cofres de cada uno por partida y un top.
@@ -29,6 +48,7 @@ ChestCounter lee las repeticiones (replays) que Fortnite guarda de cada partida 
 ## Primeros pasos
 
 1. Descarga **[`ChestCounter.exe`](../../releases/latest)**. Ese único archivo es todo lo que necesitas.
+   > ¿Tienes **Smart App Control** activado y no te deja abrirlo? Descarga **`ChestCounter-carpeta.zip`** del mismo release, descomprímelo y abre el `ChestCounter.exe` de dentro (necesita el [runtime de escritorio de .NET 10](https://dotnet.microsoft.com/download/dotnet/10.0)). Esa versión no se actualiza sola: descarga el zip nuevo cuando salga una versión.
 2. En Fortnite activa *Ajustes → Juego → Repeticiones → **Grabar repeticiones*** (y *Modos de equipos grandes* si los juegas). Sin repeticiones no hay nada que leer.
 3. Ejecuta `ChestCounter.exe`.
    > Windows puede mostrar *"Windows protegió tu PC"* porque el exe no está firmado. Haz clic en *Más información → Ejecutar de todas formas*.
@@ -45,12 +65,14 @@ ChestCounter lee las repeticiones (replays) que Fortnite guarda de cada partida 
 
 <p align="center"><img src="docs/main.png" alt="Ventana principal" width="680"></p>
 
-- **Arriba a la izquierda**: tu total de cofres, la última partida (o la actual, en verde, mientras juegas) y la sesión.
-- **A la derecha**: hoy, el mejor día, la media, la mejor partida, el histórico (partidas guardadas y desde cuándo) y los tesoros.
+- **Cabecera**: tu perfil (o un selector, si hay varias cuentas en el PC), **«Actualizado hace X»** y el botón **⟳ Actualizar**, que busca partidas nuevas al momento. Mientras juegas dice *Partida en curso*.
+- **Resumen**: cofres en total, hoy, media por partida y tesoros.
+- **Partidas** (el centro): todas tus partidas, la más reciente arriba. Cada fila: cuándo, modo, puesto (dorado = victoria, cian = top 10), eliminaciones, tesoros (💎) y tus cofres en grande. Con *Compañeros* activado, debajo va el total del equipo («equipo 72+»). Se desplaza con la rueda del ratón.
+- **Clic en una partida**: se abre su detalle dentro de la app: tus cofres por tipo, los destruidos, otros contenedores, **lo que abrió cada compañero** (por tipo) y los tesoros con quién los consiguió.
 - **Últimos 7 días**: un gráfico con los cofres de cada día.
-- **Equipo** (con *Compañeros* activado): tus cofres y los de cada compañero en la partida actual o la última, el total del equipo y lo que aportan ellos.
-- **Botones**: **Overlay** (punto verde = activado), **Informe** y **Ajustes**. Si hay varias cuentas en el PC, arriba aparece un selector de perfil.
-- **Horas del tesoro** (más probabilidad de tesoros): la tarjeta de abajo dice cuándo es la próxima, en tu hora local. El día que hay una, junto al título aparece una cuenta atrás; durante la hora, la ventana, el overlay y la página de OBS se ponen dorados y el título cuenta el tiempo que queda.
+- **Récords** (o **Equipo**, con *Compañeros* activado): mejor día, mejor partida y partidas jugadas; o tus cofres y los de cada compañero en la partida actual o la última.
+- **Horas del tesoro** (más probabilidad de tesoros): la franja de abajo dice cuándo es la próxima, en tu hora local. El día que hay una, junto al perfil aparece una cuenta atrás; durante la hora, la ventana, el overlay y la página de OBS se ponen dorados y el título cuenta el tiempo que queda.
+- **Botones**: **Overlay** (punto verde = activado), **Informe** y **Ajustes**.
 - **♥** (arriba a la derecha): un mensaje de agradecimiento, con el código de creador **DOOFY**.
 
 La ventana se puede redimensionar y maximizar: todo crece en proporción.
@@ -59,14 +81,14 @@ Las estadísticas incluyen únicamente las playlists reconocidas de Battle Royal
 
 ## El informe
 
-`report.html` se abre en tu navegador (botón **Informe**) y se actualiza solo. Empieza siempre en **Resumen**; arriba tienes las pestañas:
+`report.html` se abre en tu navegador (botón **Informe**) y se actualiza solo. Empieza en **Partidas** y arriba a la derecha dice hace cuánto se actualizaron los datos. Estas son las pestañas:
 
 | Pestaña | Qué muestra |
 |---|---|
+| **Partidas** | Todas las partidas guardadas: modo, puesto (🏆 victoria, top 10 en verde), eliminaciones, cofres, tesoros y, con compañeros, el equipo. |
 | **Resumen** | Total de cofres, sesión, victorias (y %), top 10, partidas, media, récord, mejor día, tesoros, gráfico de 30 días y las últimas partidas. |
 | **Cofres** | Por tipo de cofre, otros contenedores (cajas de munición, de comida, cañones; indica si suman al total) y una tabla **por modo de juego**. |
 | **Tesoros** | Cuántos, de cofres dorados, con origen seguro, % de partidas con tesoro, de dónde vienen y la lista con el momento exacto. |
-| **Partidas** | Las 100 últimas: modo, puesto (🏆 victoria, top 10 en verde), eliminaciones, cofres, tesoros y, con compañeros, el equipo. |
 | **Compañeros** | Cofres del equipo, **top de compañeros**, la tabla **por partida** y todos tus compañeros (ver abajo). |
 
 <p align="center"><img src="docs/report-companeros.png" alt="Pestaña Compañeros del informe" width="820"></p>
@@ -88,11 +110,27 @@ Usa los colores de la ventana (oscuro, o claro si Windows está en modo claro) y
 Actívalo en **Ajustes → Compañeros en el informe** (desactivado por defecto). Verás:
 
 - **Exacto**: con quién juegas, partidas juntos y victorias juntos.
-- **Aproximado**: los cofres de cada compañero. Salen de **tu** replay, y solo incluyen las aperturas que Fortnite envió al grabador. No hay un radio máximo garantizado: son un **mínimo (≥)**.
+- **Aproximado**: los cofres de cada compañero. Salen de **tu** replay, y solo incluyen las aperturas que Fortnite envió al grabador. No hay un radio máximo garantizado: son un **mínimo**, y por eso se muestran con **+** («13+» = al menos 13).
 - **Cofres del equipo**: tú + tus compañeros, en total y por partida, con el % que aporta cada uno; útil si buscáis un objeto aleatorio que sale de los cofres.
 - **Top de compañeros**: más cofres vistos, mejor media, récord en una partida y más victorias juntos.
 
 Con **Sumar tesoros del equipo** puedes incluir los premios compartidos en tus totales de tesoros. El informe distingue los propios, los del equipo y los de otros jugadores observados; un origen por coincidencia temporal se marca como probable. La tarjeta permanente **Token de Tienda Pirata**, debajo del gráfico y los botones, muestra el estado incluso sin detecciones. Si se identifica uno en la partida actual o anterior, se resalta en dorado e indica quién lo recibió; al pulsarla abre Tesoros. En Ajustes, **Equipo y tesoros compartidos** agrupa mostrar compañeros y sumar sus cofres o tesoros. Los premios de ID numérico desconocido se conservan sin inventar su identidad.
+
+### Cómo se calculan los cofres de tus compañeros
+
+1. **El replay no es un vídeo**: es la grabación de los datos que el servidor de Fortnite envió a **tu** juego durante la partida.
+2. **Cada cofre es un objeto con su estado**: un dato dice si ya está abierto (`bAlreadySearched`) y otro **qué jugador lo abrió** (`SearchingPawn`). Si alguien lo rompe en vez de abrirlo, el servidor también dice quién lo rompió.
+3. **El contador recorre el replay** y, cada vez que un cofre pasa a abierto, mira quién fue: si eres tú, suma a lo tuyo; si es un compañero de tu equipo, suma a ese compañero. **No se adivina por cercanía**: el dato viene del propio servidor.
+4. **El límite**: el servidor solo envía a tu juego lo que pasa **cerca de ti** (lo que Unreal Engine llama *relevancia de red*). Si tu compañero abre un cofre lejos, ese dato nunca llega a tu replay y no se puede contar. Por eso sus cifras son un **mínimo** («13+»). Las tuyas siempre son exactas.
+
+**¿Qué tan cerca tiene que estar?** Epic no publica el radio. En un análisis de 100 replays (ver [`docs/analisis-replays-2026-11-12.md`](docs/analisis-replays-2026-11-12.md)), el autor original midió la distancia entre los dos jugadores en el momento de cada apertura de un compañero:
+
+- Se registraron aperturas de compañeros hasta **unos 597 m** de distancia (ejemplos: 597, 406, 364, 348 y 327 m).
+- Eso **no es un límite garantizado**: no se ha demostrado que se registre todo lo que pasa por debajo de esa distancia ni que más lejos no llegue nada.
+- En la práctica: **si vais juntos**, el número del compañero es casi exacto; **si os separáis mucho**, se queda corto (un «0+» suele significar que estaba lejos, no que no abriera nada).
+- El contador **no aplica ningún corte de distancia**: cuenta todo lo que haya en el replay.
+
+Para tener las cifras exactas de un compañero, él tendría que usar el contador con **sus propios** replays.
 
 Con **Sumar sus cofres a tu total** (también desactivado), tu total, media, récords y overlay incluyen los cofres de tu equipo. Tu historial no cambia: al desactivarlo vuelves a ver solo los tuyos.
 
@@ -151,7 +189,7 @@ No hay nombre que escribir: se cuenta al jugador que grabó cada replay. Si hay 
 
 ## Actualizaciones
 
-Al iniciarse, el contador busca en GitHub una versión nueva y, por defecto, la **instala sola** entre dos partidas (tu historial y tus ajustes se conservan). En Ajustes puedes elegir *Preguntar* o *Nunca* (ningún acceso a la red).
+Al iniciarse, el contador busca en GitHub (en **este** repositorio) una versión nueva y, por defecto, la **instala sola** entre dos partidas (tu historial y tus ajustes se conservan). En Ajustes puedes elegir *Preguntar* o *Nunca* (ningún acceso a la red). La versión en carpeta (zip) no se actualiza sola.
 
 ## Tus datos
 
@@ -171,7 +209,13 @@ Todo se guarda en `%APPDATA%\ChestCounter`. **Tu historial no depende de los rep
 
 **No se cuenta nada.** Comprueba que las repeticiones están activadas en Fortnite. La ventana te avisa si falta la carpeta de replays o está vacía.
 
-**¿Por qué los cofres de mis compañeros salen bajos?** Porque tu replay puede omitir aperturas lejanas. No hay un radio fijo garantizado. Es un mínimo, no su total.
+**¿Cómo sabe quién abrió cada cofre?** El replay es la grabación de lo que el servidor envió a tu juego. Cada cofre lleva un dato que dice si está abierto y **quién lo abrió** (o lo rompió): no se adivina por cercanía.
+
+**¿Por qué los cofres de mis compañeros salen bajos?** Porque el servidor solo envía a tu juego lo que pasa cerca de ti, y tu replay puede omitir aperturas lejanas (se han visto registros a casi 600 m, pero no hay un radio garantizado). Es un mínimo, no su total. Tus propios cofres sí son exactos.
+
+**¿Y si juego más de 100 partidas, o Fortnite borra un replay?** No se pierde nada y tu total no baja: cada partida se guarda en `data.json` en cuanto se lee, y todas las cifras salen de ahí, no de los replays. Basta con abrir el contador de vez en cuando (o activar *Abrir con Fortnite*) para que lea los replays antes de que Fortnite los borre.
+
+**¿Me pueden banear?** El contador no toca el juego: no lee su memoria, no inyecta nada y no modifica archivos. Solo lee los replays que Fortnite guarda en el disco, y el overlay es una ventana aparte (como la de Discord u OBS). No da ninguna ventaja. Aun así, Epic es quien decide: en torneos con premios, lo más prudente es dejar el overlay apagado.
 
 **¿Cómo empiezo de cero?** **Ajustes → Restablecer estadísticas…** (con confirmación y copia de seguridad `data-backup-….json`).
 
@@ -193,10 +237,16 @@ ChestCounter.exe --overlay-preview <archivo.png>   guarda vistas previas del ove
 
 ## Compilar desde el código
 
-Instala el [SDK de .NET 10](https://dotnet.microsoft.com/download/dotnet/10.0) (Windows x64) y haz doble clic en **`build.bat`**: el exe se genera en `dist\ChestCounter.exe`. GitHub Actions compila el exe en cada push y lo publica cuando se sube una etiqueta `v*`.
+Instala el [SDK de .NET 10](https://dotnet.microsoft.com/download/dotnet/10.0) (Windows x64) y haz doble clic en **`build.bat`**: el exe se genera en `dist\ChestCounter.exe`. GitHub Actions compila el exe y el zip en cada push y publica un release cuando se sube una etiqueta `v*`.
+
+Con Smart App Control activado, compila la versión en carpeta y abre `dist-app\ChestCounter.exe`:
+
+```
+dotnet publish src/ChestCounter/ChestCounter.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=false -o dist-app
+```
 
 ## Licencia y créditos
 
-[MIT](LICENSE). El análisis de los replays se basa en [FortniteReplayDecompressor](https://github.com/Shiqan/FortniteReplayDecompressor) de Shiqan (MIT), ligeramente modificado: ver [`lib/PATCHES.md`](lib/PATCHES.md).
+[MIT](LICENSE). Proyecto original: [xdoofy92/ChestCounter](https://github.com/xdoofy92/ChestCounter), de Doofy; este fork mantiene su licencia y sus créditos. El análisis de los replays se basa en [FortniteReplayDecompressor](https://github.com/Shiqan/FortniteReplayDecompressor) de Shiqan (MIT), ligeramente modificado: ver [`lib/PATCHES.md`](lib/PATCHES.md).
 
 Este proyecto no está afiliado a Epic Games, ni cuenta con su respaldo ni patrocinio. Fortnite es una marca registrada de Epic Games, Inc.

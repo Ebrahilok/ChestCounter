@@ -16,10 +16,17 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Publish
         run: dotnet publish src/ChestCounter/ChestCounter.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=none -o dist
+      # Versión en carpeta (necesita el runtime de escritorio de .NET 10): la que abre con Smart App Control activado.
+      - name: Publish folder version
+        run: |
+          dotnet publish src/ChestCounter/ChestCounter.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=false -p:DebugType=none -o dist-app/ChestCounter
+          Compress-Archive -Path dist-app/ChestCounter -DestinationPath dist/ChestCounter-carpeta.zip
       - uses: actions/upload-artifact@v4
         with:
           name: ChestCounter
-          path: dist/ChestCounter.exe
+          path: |
+            dist/ChestCounter.exe
+            dist/ChestCounter-carpeta.zip
 
   # Only for tags: publishes the release with the GitHub CLI (no third-party action, write access only here).
   release:
@@ -33,14 +40,24 @@ jobs:
         with:
           name: ChestCounter
           path: dist
+      - name: Release notes
+        run: |
+          cat > notes.md <<'EOF'
+          Fork de [xdoofy92/ChestCounter](https://github.com/xdoofy92/ChestCounter) con la interfaz rediseñada: lista de partidas, detalle de quién abrió qué y botón Actualizar.
+
+          **Descargas** (Windows 10 / 11, sin instalación):
+          - **ChestCounter.exe**: un solo archivo. Si Windows dice *"Windows protegió tu PC"*: *Más información → Ejecutar de todas formas*.
+          - **ChestCounter-carpeta.zip**: si **Smart App Control** bloquea el exe sin dejarte abrirlo. Descomprime la carpeta y abre `ChestCounter.exe` de dentro (necesita el [runtime de escritorio de .NET 10](https://dotnet.microsoft.com/download/dotnet/10.0)).
+          EOF
+          sed -i 's/^          //' notes.md
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
-            gh release upload "$TAG" dist/ChestCounter.exe --clobber --repo "$GITHUB_REPOSITORY"
+            gh release upload "$TAG" dist/ChestCounter.exe dist/ChestCounter-carpeta.zip --clobber --repo "$GITHUB_REPOSITORY"
           else
             # No changelog in this app's releases: just the download.
-            gh release create "$TAG" dist/ChestCounter.exe --title "$TAG" --notes "Descarga **ChestCounter.exe** y ábrelo (Windows 10 / 11, sin instalación). Si ya lo tienes, se actualiza solo." --latest --repo "$GITHUB_REPOSITORY"
+            gh release create "$TAG" dist/ChestCounter.exe dist/ChestCounter-carpeta.zip --title "$TAG" --notes-file notes.md --latest --repo "$GITHUB_REPOSITORY"
           fi

@@ -26,6 +26,12 @@ public static class Updater
     /// <summary>The newer release, or null (up to date, offline, repository not reachable…).</summary>
     public static async Task<UpdateInfo?> CheckAsync()
     {
+        // Versión en carpeta (ChestCounter.dll junto al exe, la del zip): no se reemplaza por el exe de un solo
+        // archivo, que Smart App Control bloquea. Se actualiza descargando el zip nuevo a mano.
+        if (File.Exists(Path.Combine(AppContext.BaseDirectory, "ChestCounter.dll")))
+        {
+            return null;
+        }
         try
         {
             using var http = NewClient(TimeSpan.FromSeconds(10));
