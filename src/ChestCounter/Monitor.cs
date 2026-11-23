@@ -36,6 +36,9 @@ public sealed record MatchRow(DateTime Start, string Mode, int Chests, int? Plac
 /// <summary>Un recuento con nombre: «Cofre raro · 2», «Caja de munición · 5».</summary>
 public sealed record NamedCount(string Name, int Count);
 
+/// <summary>Otro contenedor (caja de munición…) y si suma a tu total por la opción de Ajustes.</summary>
+public sealed record OtherCount(string Name, int Count, bool Counted);
+
 /// <summary>Un compañero en el detalle: cofres vistos y qué abrió, por tipo.</summary>
 public sealed record MateDetail(string Name, int Chests, IReadOnlyList<NamedCount> Kinds);
 
@@ -44,9 +47,9 @@ public sealed record TreasureDetail(string Name, string Who, bool Golden, bool M
 
 /// <summary>Detalle de una partida: tus cofres por tipo, otros contenedores, compañeros y tesoros.</summary>
 public sealed record MatchDetail(int? DurationSeconds, IReadOnlyList<NamedCount> MyChests, int Destroyed,
-    IReadOnlyList<NamedCount> MyOthers, IReadOnlyList<MateDetail>? Mates, IReadOnlyList<TreasureDetail> Treasures)
+    IReadOnlyList<OtherCount> MyOthers, IReadOnlyList<MateDetail>? Mates, IReadOnlyList<TreasureDetail> Treasures)
 {
-    public static readonly MatchDetail Empty = new(null, Array.Empty<NamedCount>(), 0, Array.Empty<NamedCount>(), null, Array.Empty<TreasureDetail>());
+    public static readonly MatchDetail Empty = new(null, Array.Empty<NamedCount>(), 0, Array.Empty<OtherCount>(), null, Array.Empty<TreasureDetail>());
 }
 
 /// <summary>Un compañero y los cofres que se le vieron abrir (un mínimo).</summary>
@@ -635,11 +638,12 @@ public sealed class Monitor
     private List<MatchRow> BuildRecent(MatchRecord? live)
     {
         var kinds = _config.ExtraKinds();
-        var team = _config.ShowTeammates;
+        // Equipo visible con «Compañeros» o con «Sumar sus cofres a tu total».
+        var team = _config.ShowTeammates || _config.CountTeammateChests;
         MatchRow Row(MatchRecord m, bool isLive) => new(
             (m.MatchStartUtc ?? m.AnalyzedAtUtc).ToLocalTime(),
             Pretty.Playlist(m.Playlist),
-            team ? m.OwnChests : m.ChestsOpened,
+            m.OwnChests, // siempre solo lo tuyo: con «Sumar sus cofres», ChestsOpened ya incluye a los compañeros
             m.Placement is > 0 ? m.Placement : null,
             m.TotalPlayers is > 0 ? m.TotalPlayers : null,
             m.Eliminations,
@@ -671,9 +675,14 @@ public sealed class Monitor
             .ToList();
 
         var mine = Group(m.Chests.GroupBy(c => c.Kind).Select(g => new KeyValuePair<string, int>(g.Key, g.Count())));
-        var others = Group(m.OtherInteractions.Count > 0
-            ? m.OtherInteractions
-            : m.AmmoBoxesOpened > 0 ? new Dictionary<string, int> { [ChestKinds.AmmoBox] = m.AmmoBoxesOpened } : new Dictionary<string, int>());
+        var others = new[] { ChestKinds.AmmoBox, ChestKinds.FoodBox, ChestKinds.Cannon }
+            .Select(k => (Kind: k, Count: m.Interactions(k)))
+            .Concat(m.OtherInteractions.Where(kv => kv.Key is not (ChestKinds.AmmoBox or ChestKinds.FoodBox or ChestKinds.Cannon))
+                .Select(kv => (Kind: kv.Key, Count: kv.Value)))
+            .Where(o => o.Count > 0)
+            .Select(o => new OtherCount(L.Name(o.Kind), o.Count, countedKinds.Contains(o.Kind)))
+            .OrderByDescending(o => o.Counted).ThenByDescending(o => o.Count)
+            .ToList();
         var mates = m.Teammates?
             .Select(t => new MateDetail(t.Name, MatchRecord.Seen(t, countedKinds), Group(t.Kinds)))
             .OrderByDescending(t => t.Chests)

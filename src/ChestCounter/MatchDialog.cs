@@ -55,14 +55,22 @@ public sealed class MatchDialog : Form
             Row(you, L.T("No abriste ningún cofre.", "You didn't open any chests."), "", Theme.Muted);
         }
         foreach (var c in d.MyChests) Row(you, c.Name, L.N(c.Count), Theme.Ink);
+        var opened = d.MyChests.Sum(c => c.Count);
         if (d.Destroyed > 0)
         {
-            Row(you, L.T("destruidos (no abiertos)", "destroyed (not opened)"), L.N(d.Destroyed), Theme.Muted, indent: true);
+            Row(you, L.F("Rotos, no abiertos (de {0})", "Broken, not opened (of {0})", L.N(opened)), L.N(d.Destroyed), Theme.Muted);
         }
         if (d.MyOthers.Count > 0)
         {
             Divider(you);
-            foreach (var c in d.MyOthers) Row(you, c.Name, L.N(c.Count), Theme.Muted);
+            foreach (var c in d.MyOthers)
+            {
+                Row(you, c.Counted ? "+ " + c.Name : c.Name + "  " + L.T("(no suma)", "(not counted)"), L.N(c.Count), c.Counted ? Theme.Ink : Theme.Muted);
+            }
+            if (d.MyOthers.Any(c => c.Counted))
+            {
+                Row(you, L.F("= {0} cofres + {1} que sumas en Ajustes", "= {0} chests + {1} you count in Settings", L.N(opened), L.N(d.MyOthers.Where(c => c.Counted).Sum(c => c.Count))), "", Theme.Muted);
+            }
         }
         EndSection(you);
 
@@ -128,7 +136,7 @@ public sealed class MatchDialog : Form
         _y += 36 + Pad;
 
         // Alto: el contenido, hasta 600 px; más allá se desplaza.
-        var h = Math.Min(_y, 600);
+        var h = Math.Min(_y, 720);
         _scroll.Height = h;
         if (_y > h)
         {
@@ -136,6 +144,7 @@ public sealed class MatchDialog : Form
             _scroll.Width = W + SystemInformation.VerticalScrollBarWidth;
         }
         ClientSize = new Size(_scroll.Width, h);
+        Shown += (_, _) => _scroll.AutoScrollPosition = new Point(0, 0); // empieza arriba, no en el botón con foco
     }
 
     /// <summary>Abre el detalle de una partida.</summary>
@@ -206,13 +215,18 @@ public sealed class MatchDialog : Form
     private static void Row(SectionState s, string name, string value, Color color, bool indent = false, bool bold = false)
     {
         var x = CardPad + (indent ? 14 : 0);
-        var valueW = 150;
+        var valueW = value.Length == 0 ? 0 : 120; // sin cifra, el texto usa todo el ancho
         var font = Theme.Text(9f, bold ? FontStyle.Bold : FontStyle.Regular);
         s.Card.Controls.Add(new Label
         {
             Text = name, Font = font, ForeColor = color, BackColor = s.Card.BackColor, AutoEllipsis = true,
             Location = new Point(x, s.Y), Size = new Size(s.Card.Width - x - valueW - CardPad, 19), UseMnemonic = false,
         });
+        if (valueW == 0)
+        {
+            s.Y += 20;
+            return;
+        }
         s.Card.Controls.Add(new Label
         {
             Text = value, Font = Theme.Text(9f, FontStyle.Bold), ForeColor = color == Theme.Muted ? Theme.Muted : Theme.Ink,
