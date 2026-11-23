@@ -30,8 +30,10 @@ What changes compared to the original:
 - **List grouped by day** ("Today · 6 matches · 381 chests") and **filters** by mode, wins / top 10 or teammate; with a filter on, the summary is recalculated.
 - **Timeline** in each match's details: when you opened each chest, by what minute you had half of them, your busiest minute and the treasures.
 - **Statistics** inside the app: your chest luck (treasure and **pirate token** odds worked out from your own chests), chests by placement, by mode and with each teammate.
-- **Pirate token odds for each match**: at 1 in 137,500 per chest (×1.5 during Treasure Hour, chest by chest), in the overlay ("Token odds", current or previous match), in the window's strip (last match and today), in each match's details and in Stats (what was expected from all your chests versus what you got). The rate comes from the community, not Epic: change it in `TokenOdds.cs`.
+- **Pirate token odds for each match**: at 1 in 137,500 per chest (×1.5 during Treasure Hour, chest by chest), in the overlay ("Token odds", current or previous match), in the window's strip (last match and today), in each match's details and in Stats (what was expected from all your chests versus what you got). The rate comes from the community, not Epic: change it in `TokenOdds.cs`. **It includes your teammates' chests** (treasures are shared with the team), except those of anyone who already has the token.
 - **Daily chest goal** (in Settings): a bar under "today", a column in the overlay and a notice when you reach it. It also tells you when you **beat your record** for chests in one match.
+- **Match in progress** shown in the window and the overlay while you play (its chests are counted when it ends).
+- **Daily backup** of your history in `backups\` (the last 7 days).
 - **⟳ Refresh button** (looks for new matches right away) and **"Updated X ago"**.
 - **Summary down to four figures**: total, today, average and treasures. Records and team go in the right column.
 - **"≥ 36" becomes "36+"**, explained: it's a minimum because your replay only has what happens near you.
@@ -169,6 +171,7 @@ Streaming? While the counter is open, the same overlay is at **http://localhost:
 - **Open with Fortnite**: a small invisible process opens the counter (minimized) when Fortnite starts and closes it 30 s after Fortnite closes. It reads nothing from the game: it only looks at the list of running programs.
 - **Open the report at startup** (off by default).
 - **Teammates in the report** and **Add their chests to your total** (see above).
+- **Token odds: count team chests** (on by default): the Pirate token odds include the chests your teammates were seen opening, because the token is shared with the team. With the **Already have the token** link you mark the teammates who already have it: since they can't get it again, their chests stop counting. Each match's details show which chests count ("yours 22 + teammates 7+") and who was left out.
 - **Also count as a chest**: ammo boxes, food boxes and loot cannons (off; nothing is deleted when you change it). Chests you **destroy** are always counted.
 - **Chests before the counter**: an estimate added to your total.
 - **Updates**, **overlay for OBS**, **replays folder** and **Reset statistics** (with a backup).
@@ -206,6 +209,7 @@ Everything is saved in `%APPDATA%\ChestCounter`. **Your history does not depend 
 | File | Contents |
 |---|---|
 | `data.json` | Your whole history. **Back it up** if you change PC. |
+| `backups\data-YYYY-MM-DD.json` | Automatic daily copy of `data.json` (the last 7 days are kept). To restore one, close the counter and copy it over `data.json`. |
 | `report.html` | The report. |
 | `matches.csv` | One line per match, for Excel or Google Sheets. |
 | `config.json` | Settings, profile, replays folder and overlay position. |

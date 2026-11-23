@@ -30,8 +30,10 @@ Qué cambia respecto al original:
 - **Lista agrupada por día** («Hoy · 6 partidas · 381 cofres») y **filtros** por modo, victorias / top 10 o compañero; con filtro, el resumen se recalcula.
 - **Línea de tiempo** en el detalle de cada partida: cuándo abriste cada cofre, la mitad a qué minuto, el minuto más activo y los tesoros.
 - **Estadísticas** dentro de la app: tu suerte con los cofres (probabilidad de tesoro y de **token pirata** calculada con tus propios cofres), cofres según el puesto, por modo y con cada compañero.
-- **Probabilidad del token pirata en cada partida**: con 1 de cada 137.500 por cofre (×1,5 en la Hora del tesoro, cofre a cofre), en el overlay («Prob. token», partida actual o anterior), en la franja de la ventana (última partida y hoy), en el detalle de cada partida y en Estadísticas (lo esperado con todos tus cofres frente a lo que te salió). La tasa la indica la comunidad, no Epic: se cambia en `TokenOdds.cs`.
+- **Probabilidad del token pirata en cada partida**: con 1 de cada 137.500 por cofre (×1,5 en la Hora del tesoro, cofre a cofre), en el overlay («Prob. token», partida actual o anterior), en la franja de la ventana (última partida y hoy), en el detalle de cada partida y en Estadísticas (lo esperado con todos tus cofres frente a lo que te salió). La tasa la indica la comunidad, no Epic: se cambia en `TokenOdds.cs`. **Incluye los cofres de tus compañeros** (los tesoros se comparten con el equipo), salvo los de quien ya tenga el token.
 - **Meta diaria de cofres** (en Ajustes): barra bajo «hoy», columna en el overlay y aviso al cumplirla. También avisa cuando **rompes tu récord** de cofres en una partida.
+- **Partida en curso** visible en la ventana y en el overlay mientras juegas (sus cofres se cuentan al terminar).
+- **Copia de seguridad diaria** de tu historial en `backups\` (los últimos 7 días).
 - **Botón ⟳ Actualizar** (busca partidas nuevas al momento) y el texto **«Actualizado hace X»**.
 - **Resumen con solo cuatro cifras**: total, hoy, media y tesoros. Los récords y el equipo van en la columna derecha.
 - **«≥ 36» pasa a «36+»**, explicado: es un mínimo porque tu replay solo tiene lo que pasa cerca de ti.
@@ -173,6 +175,7 @@ Para verlo sobre el juego, pon Fortnite en **Pantalla completa en ventana** (*Aj
 - **Abrir con Fortnite**: un pequeño proceso invisible abre el contador (minimizado) cuando arranca Fortnite y lo cierra 30 s después de cerrarlo. No lee nada del juego: solo mira la lista de programas en marcha.
 - **Abrir el informe al iniciar** (desactivado por defecto).
 - **Compañeros en el informe** y **Sumar sus cofres a tu total** (ver arriba).
+- **Token: contar cofres del equipo** (activado por defecto): la probabilidad del token pirata incluye los cofres que se vio abrir a tus compañeros, porque el token se comparte con el equipo. Con el enlace **Ya tienen el token** marcas a los compañeros que ya lo tienen: como no pueden volver a sacarlo, sus cofres dejan de sumar. El detalle de cada partida dice qué cofres cuentan («tuyos 22 + compañeros 7+») y a quién se ha quitado.
 - **Contar también como cofre**: cajas de munición, cajas de comida y cañones de botín (desactivado; no se borra nada al cambiarlo). Los cofres que **rompes** se cuentan siempre.
 - **Cofres antes del contador**: un estimado que se suma a tu total.
 - **Actualizaciones**, **overlay para OBS**, **carpeta de replays** y **Restablecer estadísticas** (con copia de seguridad).
@@ -210,6 +213,7 @@ Todo se guarda en `%APPDATA%\ChestCounter`. **Tu historial no depende de los rep
 | Archivo | Contenido |
 |---|---|
 | `data.json` | Tu historial completo. **Haz copia de seguridad** si cambias de PC. |
+| `backups\data-AAAA-MM-DD.json` | Copia diaria automática de `data.json` (se guardan los últimos 7 días). Para recuperar una, cierra el contador y cópiala encima de `data.json`. |
 | `report.html` | El informe. |
 | `matches.csv` | Una línea por partida, para Excel o Google Sheets. |
 | `config.json` | Ajustes, perfil, carpeta de replays y posición del overlay. |
