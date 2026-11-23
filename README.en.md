@@ -30,6 +30,7 @@ What changes compared to the original:
 - **List grouped by day** ("Today · 6 matches · 381 chests") and **filters** by mode, wins / top 10 or teammate; with a filter on, the summary is recalculated.
 - **Timeline** in each match's details: when you opened each chest, by what minute you had half of them, your busiest minute and the treasures.
 - **Statistics** inside the app: your chest luck (treasure and **pirate token** odds worked out from your own chests), chests by placement, by mode and with each teammate.
+- **Pirate token odds for each match**: at 1 in 137,500 per chest (×1.5 during Treasure Hour, chest by chest), in the overlay ("Token odds", current or previous match), in the window's strip (last match and today), in each match's details and in Stats (what was expected from all your chests versus what you got). The rate comes from the community, not Epic: change it in `TokenOdds.cs`.
 - **Daily chest goal** (in Settings): a bar under "today", a column in the overlay and a notice when you reach it. It also tells you when you **beat your record** for chests in one match.
 - **⟳ Refresh button** (looks for new matches right away) and **"Updated X ago"**.
 - **Summary down to four figures**: total, today, average and treasures. Records and team go in the right column.

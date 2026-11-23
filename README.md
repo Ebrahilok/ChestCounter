@@ -30,6 +30,7 @@ Qué cambia respecto al original:
 - **Lista agrupada por día** («Hoy · 6 partidas · 381 cofres») y **filtros** por modo, victorias / top 10 o compañero; con filtro, el resumen se recalcula.
 - **Línea de tiempo** en el detalle de cada partida: cuándo abriste cada cofre, la mitad a qué minuto, el minuto más activo y los tesoros.
 - **Estadísticas** dentro de la app: tu suerte con los cofres (probabilidad de tesoro y de **token pirata** calculada con tus propios cofres), cofres según el puesto, por modo y con cada compañero.
+- **Probabilidad del token pirata en cada partida**: con 1 de cada 137.500 por cofre (×1,5 en la Hora del tesoro, cofre a cofre), en el overlay («Prob. token», partida actual o anterior), en la franja de la ventana (última partida y hoy), en el detalle de cada partida y en Estadísticas (lo esperado con todos tus cofres frente a lo que te salió). La tasa la indica la comunidad, no Epic: se cambia en `TokenOdds.cs`.
 - **Meta diaria de cofres** (en Ajustes): barra bajo «hoy», columna en el overlay y aviso al cumplirla. También avisa cuando **rompes tu récord** de cofres en una partida.
 - **Botón ⟳ Actualizar** (busca partidas nuevas al momento) y el texto **«Actualizado hace X»**.
 - **Resumen con solo cuatro cifras**: total, hoy, media y tesoros. Los récords y el equipo van en la columna derecha.

@@ -127,6 +127,23 @@ public sealed class MatchDialog : Form
                 "“+” = at least. Your replay only stores what happens near you: if a teammate opens chests far away, the game doesn't send them to you and they can't be counted."));
         }
 
+        // ---- Token pirata: probabilidad en esta partida ------------------------------------------------------
+        if (row.OwnChestCount > 0)
+        {
+            var tk = Section(L.T("Token pirata", "Pirate token"), TokenOdds.Percent(row.TokenChance), Theme.Amber);
+            Row(tk, L.F("Probabilidad en esta partida ({0})", "Chance in this match ({0})", TokenOdds.OneIn(row.TokenChance)), TokenOdds.Percent(row.TokenChance), Theme.Ink);
+            Row(tk, L.F("{0} cofres × 1 de cada {1}", "{0} chests × 1 in {1}", L.N(row.OwnChestCount), TokenOdds.OneInChests.ToString("#,0", L.Culture)), "", Theme.Muted);
+            if (row.TokenHourChests > 0)
+            {
+                Row(tk, L.F("★ {0} en la Hora del tesoro (×1,5)", "★ {0} during Treasure Hour (×1.5)", L.N(row.TokenHourChests)), "", Theme.Amber);
+            }
+            Row(tk, row.OwnTokens > 0
+                    ? L.T("Resultado: ★ ¡te salió el token!", "Result: ★ you got the token!")
+                    : L.T("Resultado: no salió (lo normal con esta probabilidad)", "Result: no token (as expected at these odds)"),
+                "", row.OwnTokens > 0 ? Theme.Amber : Theme.Muted);
+            EndSection(tk);
+        }
+
         // ---- Tesoros ---------------------------------------------------------------------------------------
         if (d.Treasures.Count > 0)
         {

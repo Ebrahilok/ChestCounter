@@ -192,8 +192,11 @@ public sealed class MainForm : Form
         _pirateCard = new Card { Location = new Point(Pad, PirateY), Size = new Size(DesignW - 2 * Pad, 40), Radius = 12, BackColor = Theme.Panel };
         _pirateLabel = Lbl(_pirateCard, "", 8.0f, FontStyle.Bold, Theme.Muted, new Point(13, 0), new Size(_pirateCard.Width - 26, 40), ContentAlignment.MiddleCenter);
         _pirateCard.Cursor = _pirateLabel.Cursor = Cursors.Hand;
-        _pirateCard.Click += (_, _) => Open(new Uri(_store.ReportPath).AbsoluteUri + "#tesoros");
-        _pirateLabel.Click += (_, _) => Open(new Uri(_store.ReportPath).AbsoluteUri + "#tesoros");
+        // Clic: Estadísticas (ahí está la probabilidad de token completa).
+        _pirateCard.Click += (_, _) => _statsButton?.PerformClick();
+        _pirateLabel.Click += (_, _) => _statsButton?.PerformClick();
+        _tips.SetToolTip(_pirateLabel, L.F("Probabilidad de sacar el token de la Tienda pirata: 1 de cada {0} por cofre (×1,5 en la Hora del tesoro), con tus cofres de cada partida. Clic = Estadísticas.",
+            "Chance of getting the Pirate Shop token: 1 in {0} per chest (×1.5 during Treasure Hour), with your chests in each match. Click = Stats.", TokenOdds.OneInChests.ToString("#,0", L.Culture)));
         Controls.Add(_pirateCard);
 
         // ---- Fila inferior: aviso o actualización a la izquierda, botones a la derecha -------------------------
@@ -448,11 +451,10 @@ public sealed class MainForm : Form
                 : L.T("★ TOKEN PIRATA · Detectado en la partida anterior", "★ PIRATE TOKEN · Detected in the previous match"))
                 + "  ·  " + (s.TokenDetails ?? L.T("Ver detalles en Tesoros →", "View details in Treasures →"))
             : treasureHour != null
-                ? L.T("★ HORA DEL TESORO · Más probabilidad de tesoros", "★ TREASURE HOUR · Better treasure odds")
-                    + "  ·  " + L.T("Tienda pirata ×1,5 · Traje dorado ×7,5 · Vehículo ×10", "Pirate Shop ×1.5 · Gold outfit ×7.5 · Vehicle ×10")
-            : TreasureHours.Next(now) is { } next
-                ? L.F("Próxima Hora del tesoro: {0} · Ver Tesoros →", "Next Treasure Hour: {0} · View Treasures →", TreasureHours.When(next))
-                : L.T("Sin token pirata detectado · Ver Tesoros →", "No pirate token detected · View Treasures →"));
+                ? L.T("★ HORA DEL TESORO · token ×1,5", "★ TREASURE HOUR · token ×1.5") + "  ·  " + TokenLine(s)
+            : TokenLine(s) + (TreasureHours.Next(now) is { } next
+                ? "  ·  " + L.F("Próxima Hora del tesoro: {0}", "Next Treasure Hour: {0}", TreasureHours.When(next))
+                : ""));
         _pirateLabel.ForeColor = _flash != null ? Theme.Mint : pirateAlert || treasureHour != null ? Theme.Amber : Theme.Muted;
         RenderTreasureHour(treasureHour);
 
@@ -500,6 +502,15 @@ public sealed class MainForm : Form
 
         UpdateStatus();
     }
+
+    /// <summary>"Prob. de token: esta partida 0,02 % · hoy 0,3 %" (o la última partida entre partidas).</summary>
+    private static string TokenLine(MonitorState s) =>
+        (s.TokenLive is { } live
+            ? L.F("Prob. de token: esta partida {0}", "Token odds: this match {0}", TokenOdds.Percent(live))
+            : s.TokenLast is { } last
+                ? L.F("Prob. de token: última partida {0}", "Token odds: last match {0}", TokenOdds.Percent(last))
+                : L.T("Prob. de token: sin partidas aún", "Token odds: no matches yet"))
+        + "  ·  " + L.F("hoy {0}", "today {0}", TokenOdds.Percent(s.TokenToday));
 
     // ---- Filtro de la lista ------------------------------------------------------------------------------
 

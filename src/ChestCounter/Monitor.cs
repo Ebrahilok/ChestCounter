@@ -27,6 +27,15 @@ public sealed record MonitorState(OverlayView View, IReadOnlyList<Profile> Profi
 
     /// <summary>«Sumar sus cofres a tu total» activado: las cifras contadas incluyen a los compañeros.</summary>
     public bool CountsTeammates { get; init; }
+
+    /// <summary>Probabilidad de token de la partida en curso (null si no hay o no se puede leer).</summary>
+    public double? TokenLive { get; init; }
+
+    /// <summary>Probabilidad de token de la última partida terminada (null si no hay).</summary>
+    public double? TokenLast { get; init; }
+
+    /// <summary>Probabilidad de al menos un token con los cofres de hoy (con la partida en curso).</summary>
+    public double TokenToday { get; init; }
 }
 
 /// <summary>Una fila de la lista de partidas de la ventana principal.</summary>
@@ -46,6 +55,12 @@ public sealed record MatchRow(DateTime Start, string Mode, int Chests, int? Plac
 
     /// <summary>Tokens de la Tienda pirata que te salieron a ti.</summary>
     public int OwnTokens { get; init; }
+
+    /// <summary>Probabilidad de token en esta partida con tus cofres (ver <see cref="TokenOdds"/>).</summary>
+    public double TokenChance { get; init; }
+
+    /// <summary>Cofres de esta partida abiertos durante una Hora del tesoro (×1,5).</summary>
+    public int TokenHourChests { get; init; }
 
     /// <summary>Qué se abrió y quién (para la ventana de detalle de la partida).</summary>
     public MatchDetail Detail { get; init; } = MatchDetail.Empty;
@@ -566,6 +581,22 @@ public sealed class Monitor
         var liveAdjusted = (_tracker.LiveMatch != null && Profiles.Counted(_tracker.LiveMatch, _config)) ? Profiles.Adjust(_tracker.LiveMatch, _config) : null;
         var view = OverlayModel.Build(Profiles.View(_data, _config), liveAdjusted, _tracker.IsLive && liveAdjusted != null, Profiles.InitialChests(_data, _config));
         var stats = BuildStats();
+
+        // Probabilidad de token: la partida en curso, la última terminada y todo lo de hoy.
+        var shownMatches = Profiles.View(_data, _config).Matches;
+        var lastMatch = shownMatches.OrderByDescending(m => m.MatchStartUtc ?? m.AnalyzedAtUtc).FirstOrDefault();
+        double? tokenLive = liveAdjusted != null && _tracker.IsLive ? TokenOdds.ForMatch(liveAdjusted).Chance : null;
+        double? tokenLast = lastMatch != null ? TokenOdds.ForMatch(lastMatch).Chance : null;
+        var today = DateTime.Now.Date;
+        var tokenToday = TokenOdds.Combine(shownMatches
+            .Where(m => (m.MatchStartUtc ?? m.AnalyzedAtUtc).ToLocalTime().Date == today)
+            .Select(m => TokenOdds.ForMatch(m).Chance)
+            .Append(tokenLive ?? 0));
+        if ((tokenLive ?? tokenLast) is { } shownToken)
+        {
+            // Overlay: probabilidad de token de la partida actual (o de la anterior entre partidas).
+            view = view with { Rows = view.Rows.Append(new OverlayRow(L.T("Prob. token", "Token odds"), TokenOdds.Percent(shownToken))).ToList() };
+        }
         if (_config.DailyGoal > 0)
         {
             // Meta diaria: una columna más en el overlay («Meta hoy 120/300», con ✓ al cumplirla).
@@ -596,6 +627,9 @@ public sealed class Monitor
             Refreshing = _refreshRequested,
             RefreshResult = _refreshResult,
             DailyGoal = _config.DailyGoal,
+            TokenLive = tokenLive,
+            TokenLast = tokenLast,
+            TokenToday = tokenToday,
             CountsTeammates = _config.CountTeammateChests,
         };
         Changed?.Invoke(state);
@@ -701,6 +735,8 @@ public sealed class Monitor
             OwnChestCount = m.Chests.Count,
             OwnTreasures = m.TreasureFinds.Count(f => f.Scope == "own"),
             OwnTokens = m.TreasureFinds.Count(f => f.Scope == "own" && f.IsPirateToken),
+            TokenChance = TokenOdds.ForMatch(m).Chance,
+            TokenHourChests = TokenOdds.ForMatch(m).HourChests,
             Detail = BuildDetail(m, kinds),
         };
         var rows = new List<MatchRow>();
