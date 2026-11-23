@@ -27,6 +27,10 @@ What changes compared to the original:
 
 - **The match list is the center of the window**: newest first (the one you're playing, in green), with when, mode, placement, eliminations and your chests in large type. **All** saved matches are shown.
 - **Click a match → details inside the app**: your chests by type, the ones you broke, ammo and food boxes, **what each teammate opened** and the treasures with who got them. The HTML report only opens with its button.
+- **List grouped by day** ("Today · 6 matches · 381 chests") and **filters** by mode, wins / top 10 or teammate; with a filter on, the summary is recalculated.
+- **Timeline** in each match's details: when you opened each chest, by what minute you had half of them, your busiest minute and the treasures.
+- **Statistics** inside the app: your chest luck (treasure and **pirate token** odds worked out from your own chests), chests by placement, by mode and with each teammate.
+- **Daily chest goal** (in Settings): a bar under "today", a column in the overlay and a notice when you reach it. It also tells you when you **beat your record** for chests in one match.
 - **⟳ Refresh button** (looks for new matches right away) and **"Updated X ago"**.
 - **Summary down to four figures**: total, today, average and treasures. Records and team go in the right column.
 - **"≥ 36" becomes "36+"**, explained: it's a minimum because your replay only has what happens near you.
@@ -34,6 +38,7 @@ What changes compared to the original:
 - The 7-day chart no longer cuts 4-digit figures (2016 read as "201").
 - **Folder version (zip)** for Smart App Control users: the single-file exe is unsigned and Smart App Control blocks it with no way to open it.
 - Automatic updates come from **this** repository, not the original.
+- All new text is translated into the app's 10 languages.
 
 ChestCounter reads the replays Fortnite saves of every match and keeps count of the chests you open, the **treasure hunt treasures** and, if you want, your **teammates'** chests. Everything is saved on your PC: even when Fortnite deletes the replays, your history is kept.
 
@@ -67,12 +72,14 @@ ChestCounter reads the replays Fortnite saves of every match and keeps count of 
 
 - **Header**: your profile (or a picker, with several accounts on the PC), **"Updated X ago"** and the **⟳ Refresh** button, which looks for new matches right away. While you play it says *Match in progress*.
 - **Summary**: chests in total, today, average per match and treasures.
-- **Matches** (the center): all your matches, newest first. Each row: when, mode, placement (gold = win, cyan = top 10), eliminations, treasures (💎) and your chests in large type. With *Teammates* on, the team total goes underneath ("team 72+"). Scroll with the mouse wheel.
+- **Matches** (the center): all your matches, grouped by day and newest first. The **Filter** button shows only one mode, wins / top 10, or the matches with a teammate (press it again to clear the filter). Each row: when, mode, placement (gold = win, cyan = top 10), eliminations, treasures (💎) and your chests in large type. With *Teammates* on, the team total goes underneath ("team 72+"). Scroll with the mouse wheel.
 - **Click a match**: its details open inside the app: your chests by type, destroyed ones, other containers, **what each teammate opened** (by type) and the treasures with who got them.
 - **Last 7 days**: a chart with each day's chests.
 - **Records** (or **Team**, with *Teammates* on): best day, best match and matches played; or your chests and each teammate's in the current or last match.
 - **Treasure Hours** (better treasure odds): the bottom strip shows when the next one is, in your local time. On a day with one, a countdown appears next to the profile; during the hour, the window, the overlay and the OBS page turn gold and the title counts down the time left.
-- **Buttons**: **Overlay** (green dot = on), **Report** and **Settings**.
+- **Stats**: treasure and pirate token odds from your chests (Epic doesn't publish the figures: it's an estimate from your data; with no token yet, it gives an upper bound), chests by placement (more chests = better placement?), by mode and with each teammate (click one to see your matches together).
+- **Daily goal**: set it in Settings; it shows as a bar under "today" and in the overlay, with a notice when you reach it. Beating your record for chests in one match also shows a notice.
+- **Buttons**: **Stats**, **Overlay** (green dot = on), **Report** and **Settings**.
 - **♥** (top right): a thank-you message, with the creator code **DOOFY**.
 
 The window can be resized and maximized: everything grows in proportion.

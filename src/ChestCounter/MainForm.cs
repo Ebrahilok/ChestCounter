@@ -30,8 +30,19 @@ public sealed class MainForm : Form
     private readonly PillButton _refresh;
     private DateTime? _refreshClickedUtc;
     private readonly Label _total, _today, _average, _treasures;
-    private readonly Label _todayCap;
+    private readonly Label _todayCap, _totalCap;
+    private readonly GoalBar _goalBar;
     private readonly Label _matchesCount;
+    private readonly PillButton _filterButton;
+    private readonly PillButton _statsButton;
+    // Filtro de la lista (null / false = sin filtrar).
+    private string? _filterMode, _filterMate;
+    private bool _filterWins, _filterTop10;
+    // Avisos de récord y de meta cumplida (en la franja de abajo, unos segundos).
+    private string? _flash;
+    private DateTime _flashUntil;
+    private int? _prevBest, _prevToday;
+    private DateTime? _prevNewest;
     private readonly MatchList _matches;
     private readonly DailyChart _daily;
     private readonly Card _sideCard;
@@ -57,7 +68,7 @@ public sealed class MainForm : Form
     private const int SideW = DesignW - Pad - SideX;
     private const int BodyY = 146, BodyH = 216;
     private const int PirateY = BodyY + BodyH + 8, BottomY = PirateY + 40 + 8;
-    private const int ButtonW = 84, ButtonGap = 8;
+    private const int ButtonW = 84, ButtonGap = 8, Buttons = 4;
 
     public MainForm(Monitor monitor, Store store)
     {
@@ -137,8 +148,10 @@ public sealed class MainForm : Form
         Controls.Add(_summary);
         var colW = _summary.Width / 4;
         _total = Lbl(_summary, "0", 22f, FontStyle.Bold, Theme.Cyan, new Point(14, 4), new Size(colW - 18, 42));
-        Lbl(_summary, L.T("cofres en total", "chests in total"), 8.0f, FontStyle.Regular, Theme.Muted, new Point(17, 47), new Size(colW - 20, 16));
+        _totalCap = Lbl(_summary, L.T("cofres en total", "chests in total"), 8.0f, FontStyle.Regular, Theme.Muted, new Point(17, 47), new Size(colW - 20, 16));
         _today = SummaryFigure(1, colW, Theme.Ink, L.T("hoy", "today"), out _todayCap);
+        _goalBar = new GoalBar { Location = new Point(colW + 18, 64), Size = new Size(colW - 34, 5), Visible = false };
+        _summary.Controls.Add(_goalBar);
         _average = SummaryFigure(2, colW, Theme.Ink, L.T("media por partida", "average per match"), out _);
         _treasures = SummaryFigure(3, colW, Theme.Rose, L.T("tesoros", "treasures"), out _);
         for (var i = 1; i < 4; i++)
@@ -148,8 +161,11 @@ public sealed class MainForm : Form
 
         // ---- Lista de partidas (lo principal) --------------------------------------------------------------
         var list = new Card { Location = new Point(Pad, BodyY), Size = new Size(ListW, BodyH), Radius = 14 };
-        Lbl(list, L.T("Partidas", "Matches"), 9f, FontStyle.Bold, Theme.Ink, new Point(14, 9), new Size(140, 18));
-        _matchesCount = Lbl(list, "", 8.0f, FontStyle.Regular, Theme.Muted, new Point(ListW - 14 - 210, 10), new Size(210, 16), ContentAlignment.TopRight);
+        Lbl(list, L.T("Partidas", "Matches"), 9f, FontStyle.Bold, Theme.Ink, new Point(14, 9), new Size(80, 18));
+        _matchesCount = Lbl(list, "", 8.0f, FontStyle.Regular, Theme.Muted, new Point(94, 10), new Size(ListW - 14 - 118 - 8 - 94, 16), ContentAlignment.TopRight);
+        _filterButton = new PillButton { Text = L.T("Filtrar ▾", "Filter ▾"), Location = new Point(ListW - 14 - 118, 6), Size = new Size(118, 24), Radius = 9, Font = Theme.Text(8f, FontStyle.Bold) };
+        _filterButton.Click += (_, _) => ShowFilterMenu();
+        list.Controls.Add(_filterButton);
         _matches = new MatchList { Location = new Point(4, 32), Size = new Size(ListW - 8, BodyH - 38) };
         _matches.RowClicked += row => MatchDialog.Open(this, row, _store.ReportPath);
         list.Controls.Add(_matches);
@@ -181,7 +197,7 @@ public sealed class MainForm : Form
         Controls.Add(_pirateCard);
 
         // ---- Fila inferior: aviso o actualización a la izquierda, botones a la derecha -------------------------
-        var noticeW = DesignW - 2 * Pad - 3 * ButtonW - 3 * ButtonGap;
+        var noticeW = DesignW - 2 * Pad - Buttons * ButtonW - Buttons * ButtonGap;
         _noticeCard = new Card { Location = new Point(Pad, BottomY), Size = new Size(noticeW, 38), Radius = 12, BackColor = Theme.Card, Visible = false };
         _notice = Lbl(_noticeCard, "", 8.0f, FontStyle.Regular, Theme.AccentSoft, new Point(12, 0), new Size(noticeW - 24, 38), ContentAlignment.MiddleLeft);
         _noticeCard.Click += (_, _) => { if (_autoCloseOffer) _monitor.KeepOpen(); };
@@ -192,6 +208,14 @@ public sealed class MainForm : Form
         _update.Click += (_, _) => _monitor.InstallUpdate();
         Controls.Add(_update);
 
+        _statsButton = Action(L.T("Estadísticas", "Stats"), DesignW - Pad - 4 * ButtonW - 3 * ButtonGap);
+        _statsButton.Click += (_, _) => StatsDialog.Open(this, Filtered(_last?.Recent ?? Array.Empty<MatchRow>()), FilterText(), mate =>
+        {
+            ClearFilter();
+            _filterMate = mate;
+            ApplyFilter();
+        });
+        _tips.SetToolTip(_statsButton, L.T("Cofres según el puesto, por modo y con tus compañeros", "Chests by placement, by mode and with your teammates"));
         _overlayButton = Action(L.T("Overlay", "Overlay"), DesignW - Pad - 3 * ButtonW - 2 * ButtonGap);
         _overlayButton.Click += (_, _) => _monitor.ToggleOverlay();
         _reportButton = Action(L.T("Informe", "Report"), DesignW - Pad - 2 * ButtonW - ButtonGap);
@@ -203,7 +227,16 @@ public sealed class MainForm : Form
             dialog.ShowDialog(this);
         };
 
-        _clock.Tick += (_, _) => { UpdateTreasureClock(); UpdateStatus(); };
+        _clock.Tick += (_, _) =>
+        {
+            UpdateTreasureClock();
+            UpdateStatus();
+            if (_flash != null && DateTime.UtcNow > _flashUntil && _last != null)
+            {
+                _flash = null;
+                Render(_last);
+            }
+        };
         _clock.Start();
         FormClosed += (_, _) => { _clock.Dispose(); _tips.Dispose(); };
 
@@ -346,19 +379,59 @@ public sealed class MainForm : Form
         var st = s.Stats;
         var live = s.Recent.FirstOrDefault()?.Live == true;
 
-        // Franja de resumen.
-        _total.Text = s.View.Total;
-        _today.Text = L.N(st.Today);
-        _todayCap.Text = live ? L.T("hoy (con la actual)", "today (incl. current)") : L.T("hoy", "today");
-        _average.Text = st.Matches > 0 ? st.Average.ToString("0.0", L.Culture) : "—";
-        _treasures.Text = $"{OverlayModel.TreasureIcon} {L.N(st.Treasures)}";
+        CheckCelebrations(s);
+
+        // Franja de resumen: todo, o solo las partidas del filtro.
+        var rows = Filtered(s.Recent);
+        var filtered = FilterActive;
+        var today = filtered ? rows.Where(r => r.Start.Date == DateTime.Now.Date).Sum(r => r.Counted) : st.Today;
+        var finished = rows.Where(r => !r.Live).ToList();
+        _total.Text = filtered ? L.N(rows.Sum(r => r.Counted)) : s.View.Total;
+        _totalCap.Text = filtered ? L.T("cofres (filtro)", "chests (filtered)") : L.T("cofres en total", "chests in total");
+        _total.ForeColor = filtered ? Theme.AccentSoft : Theme.Cyan;
+        _today.Text = L.N(today);
+        _average.Text = filtered
+            ? finished.Count > 0 ? finished.Average(r => r.Counted).ToString("0.0", L.Culture) : "—"
+            : st.Matches > 0 ? st.Average.ToString("0.0", L.Culture) : "—";
+        _treasures.Text = $"{OverlayModel.TreasureIcon} {L.N(filtered ? rows.Sum(r => r.Treasures) : st.Treasures)}";
+
+        // Meta diaria: barra bajo «hoy» (verde al cumplirla).
+        var goal = s.DailyGoal;
+        _goalBar.Visible = goal > 0 && !filtered;
+        if (goal > 0 && !filtered)
+        {
+            _goalBar.Value = Math.Min(1f, (float)st.Today / goal);
+            _todayCap.Text = st.Today >= goal
+                ? L.F("hoy · ✓ meta {0}", "today · ✓ goal {0}", L.N(goal))
+                : L.F("hoy · meta {0}", "today · goal {0}", L.N(goal));
+            _todayCap.ForeColor = st.Today >= goal ? Theme.Mint : Theme.Muted;
+        }
+        else
+        {
+            _todayCap.Text = live ? L.T("hoy (con la actual)", "today (incl. current)") : L.T("hoy", "today");
+            _todayCap.ForeColor = Theme.Muted;
+        }
 
         // Lista de partidas.
-        _matches.SetRows(s.Recent);
-        _matchesCount.Text = st.HistoryMatches == 0 ? ""
-            : st.HistorySince is { } since
-                ? L.F("{0} guardadas · desde {1:dd/MM/yy}", "{0} saved · since {1:dd/MM/yy}", L.N(st.HistoryMatches), since)
-                : L.F("{0} guardadas", "{0} saved", L.N(st.HistoryMatches));
+        _matches.EmptyText = filtered
+            ? L.T("Ninguna partida con este filtro.", "No matches with this filter.")
+            : L.T("Aún no hay partidas. Juega una con los replays activados y aparecerá aquí.", "No matches yet. Play one with replays turned on and it will show up here.");
+        _matches.SetRows(rows, s.CountsTeammates);
+        _matchesCount.Text = filtered
+            ? L.F("{0} de {1}", "{0} of {1}", L.N(rows.Count), L.N(s.Recent.Count))
+            : st.HistoryMatches == 0 ? ""
+            : L.Count(st.HistoryMatches, "partida", "partidas", "match", "matches");
+        _tips.SetToolTip(_matchesCount, (st.HistorySince is { } since
+            ? L.F("Guardadas desde el {0:dd/MM/yy}. Aunque Fortnite borre los replays, aquí no se pierden.", "Saved since {0:dd/MM/yy}. Even when Fortnite deletes the replays, they stay here.", since)
+            : "") + (s.CountsTeammates
+            ? "\n" + L.T("* Los cofres de cada día incluyen los de tus compañeros («Sumar sus cofres a tu total»).", "* Each day's chests include your teammates' (“Add their chests to your total”).")
+            : ""));
+        var filterText = FilterText();
+        _filterButton.Text = filterText != null ? filterText + "  ✕" : L.T("Filtrar ▾", "Filter ▾");
+        _filterButton.BackColor = filterText != null ? Theme.Accent : Theme.Panel;
+        _filterButton.HoverColor = filterText != null ? Theme.AccentHover : Theme.PanelHover;
+        _filterButton.ForeColor = filterText != null ? Theme.AccentInk : Theme.Ink;
+        _tips.SetToolTip(_filterButton, filterText != null ? L.T("Clic para quitar el filtro", "Click to clear the filter") : L.T("Filtrar por modo, resultado o compañero", "Filter by mode, result or teammate"));
 
         _daily.SetDays(st.LastDays);
         if (s.Team != null) RenderTeam(s.Team); else RenderRecords(st);
@@ -370,7 +443,7 @@ public sealed class MainForm : Form
         var pirateAlert = s.PirateTokenLive || st.LastMatch?.PirateToken == true;
         var now = DateTime.UtcNow;
         var treasureHour = TreasureHours.Active(now);
-        _pirateLabel.Text = pirateAlert
+        _pirateLabel.Text = _flash ?? (pirateAlert
             ? (s.PirateTokenLive ? L.T("★ TOKEN PIRATA · Detectado en esta partida", "★ PIRATE TOKEN · Detected in this match")
                 : L.T("★ TOKEN PIRATA · Detectado en la partida anterior", "★ PIRATE TOKEN · Detected in the previous match"))
                 + "  ·  " + (s.TokenDetails ?? L.T("Ver detalles en Tesoros →", "View details in Treasures →"))
@@ -379,8 +452,8 @@ public sealed class MainForm : Form
                     + "  ·  " + L.T("Tienda pirata ×1,5 · Traje dorado ×7,5 · Vehículo ×10", "Pirate Shop ×1.5 · Gold outfit ×7.5 · Vehicle ×10")
             : TreasureHours.Next(now) is { } next
                 ? L.F("Próxima Hora del tesoro: {0} · Ver Tesoros →", "Next Treasure Hour: {0} · View Treasures →", TreasureHours.When(next))
-                : L.T("Sin token pirata detectado · Ver Tesoros →", "No pirate token detected · View Treasures →");
-        _pirateLabel.ForeColor = pirateAlert || treasureHour != null ? Theme.Amber : Theme.Muted;
+                : L.T("Sin token pirata detectado · Ver Tesoros →", "No pirate token detected · View Treasures →"));
+        _pirateLabel.ForeColor = _flash != null ? Theme.Mint : pirateAlert || treasureHour != null ? Theme.Amber : Theme.Muted;
         RenderTreasureHour(treasureHour);
 
         // Perfil: nombre fijo con una sola cuenta, selector con varias.
@@ -426,6 +499,119 @@ public sealed class MainForm : Form
         _noticeCard.Visible = s.Update == null && !string.IsNullOrEmpty(s.Notice);
 
         UpdateStatus();
+    }
+
+    // ---- Filtro de la lista ------------------------------------------------------------------------------
+
+    private bool FilterActive => _filterMode != null || _filterMate != null || _filterWins || _filterTop10;
+
+    private IReadOnlyList<MatchRow> Filtered(IReadOnlyList<MatchRow> rows) => !FilterActive ? rows : rows.Where(r =>
+        (_filterMode == null || r.Mode == _filterMode)
+        && (!_filterWins || r.Placement == 1)
+        && (!_filterTop10 || r.Placement is <= 10)
+        && (_filterMate == null || r.Detail.Mates?.Any(m => string.Equals(m.Name, _filterMate, StringComparison.OrdinalIgnoreCase)) == true)).ToList();
+
+    /// <summary>Descripción corta del filtro («Escuadrón · victorias · con X»), o null sin filtro.</summary>
+    private string? FilterText()
+    {
+        if (!FilterActive) return null;
+        var parts = new List<string>();
+        if (_filterWins) parts.Add(L.T("victorias", "wins"));
+        if (_filterTop10) parts.Add(L.T("top 10", "top 10"));
+        if (_filterMode != null) parts.Add(_filterMode);
+        if (_filterMate != null) parts.Add(L.F("con {0}", "with {0}", _filterMate));
+        return string.Join(" · ", parts);
+    }
+
+    private void ClearFilter()
+    {
+        _filterMode = _filterMate = null;
+        _filterWins = _filterTop10 = false;
+    }
+
+    private void ApplyFilter()
+    {
+        if (_last != null) Render(_last);
+    }
+
+    /// <summary>Con filtro, el botón lo quita; sin filtro, abre el menú: resultado, modo y compañero.</summary>
+    private void ShowFilterMenu()
+    {
+        if (FilterActive)
+        {
+            ClearFilter();
+            ApplyFilter();
+            return;
+        }
+        var rows = _last?.Recent ?? Array.Empty<MatchRow>();
+        var menu = new ContextMenuStrip { Renderer = new DarkMenuRenderer(), BackColor = Theme.Panel, ForeColor = Theme.Ink, ShowImageMargin = false, Font = Theme.Text(9f) };
+        ToolStripMenuItem Item(string text, Action act, bool enabled = true)
+        {
+            var it = new ToolStripMenuItem(text) { ForeColor = Theme.Ink, Enabled = enabled };
+            it.Click += (_, _) => { act(); ApplyFilter(); };
+            return it;
+        }
+        ToolStripLabel Head(string text) => new(text) { ForeColor = Theme.Muted, Font = Theme.Text(8f, FontStyle.Bold) };
+
+        menu.Items.Add(Head(L.T("RESULTADO", "RESULT")));
+        menu.Items.Add(Item(L.F("Solo victorias ({0})", "Wins only ({0})", rows.Count(r => r.Placement == 1)), () => _filterWins = true));
+        menu.Items.Add(Item(L.F("Solo top 10 ({0})", "Top 10 only ({0})", rows.Count(r => r.Placement is <= 10)), () => _filterTop10 = true));
+
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(Head(L.T("MODO", "MODE")));
+        foreach (var mode in rows.GroupBy(r => r.Mode).OrderByDescending(g => g.Count()))
+        {
+            var name = mode.Key;
+            menu.Items.Add(Item($"{name} ({mode.Count()})", () => _filterMode = name));
+        }
+
+        var mates = rows.SelectMany(r => r.Detail.Mates ?? (IEnumerable<MateDetail>)Array.Empty<MateDetail>())
+            .GroupBy(m => m.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(g => (Name: g.First().Name, Count: g.Count()))
+            .OrderByDescending(m => m.Count).Take(15).ToList();
+        if (mates.Count > 0)
+        {
+            menu.Items.Add(new ToolStripSeparator());
+            var with = new ToolStripMenuItem(L.T("Con compañero", "With teammate")) { ForeColor = Theme.Ink };
+            with.DropDown.BackColor = Theme.Panel;
+            ((ToolStripDropDownMenu)with.DropDown).ShowImageMargin = false;
+            with.DropDown.Renderer = new DarkMenuRenderer();
+            foreach (var (name, count) in mates)
+            {
+                with.DropDownItems.Add(Item(L.F("{0} ({1})", "{0} ({1})", name, count), () => _filterMate = name));
+            }
+            menu.Items.Add(with);
+        }
+        menu.Closed += (_, _) => BeginInvoke(new Action(menu.Dispose));
+        menu.Show(_filterButton, new Point(0, _filterButton.Height));
+    }
+
+    /// <summary>
+    /// Récord de partida o meta del día cumplida: un aviso en la franja de abajo durante 30 s. Solo con partidas
+    /// nuevas mientras la ventana está abierta (no al arrancar).
+    /// </summary>
+    private void CheckCelebrations(MonitorState s)
+    {
+        var finished = s.Recent.Where(r => !r.Live).ToList();
+        var newest = finished.FirstOrDefault();
+        var best = finished.Count > 0 ? finished.Max(r => r.Counted) : 0;
+        string? flash = null;
+        if (_prevNewest != null && newest != null && newest.Start > _prevNewest && _prevBest is { } oldBest && newest.Counted > oldBest)
+        {
+            flash = L.F("🏆 ¡NUEVO RÉCORD!  {0} cofres en una partida (antes {1})", "🏆 NEW RECORD!  {0} chests in one match (was {1})", L.N(newest.Counted), L.N(oldBest));
+        }
+        else if (s.DailyGoal > 0 && _prevToday is { } before && before < s.DailyGoal && s.Stats.Today >= s.DailyGoal)
+        {
+            flash = L.F("🎯 ¡META DE HOY CUMPLIDA!  {0} de {1} cofres", "🎯 TODAY'S GOAL REACHED!  {0} of {1} chests", L.N(s.Stats.Today), L.N(s.DailyGoal));
+        }
+        if (flash != null)
+        {
+            _flash = flash;
+            _flashUntil = DateTime.UtcNow.AddSeconds(30);
+        }
+        _prevNewest = newest?.Start;
+        _prevBest = best;
+        _prevToday = s.Stats.Today;
     }
 
     /// <summary>

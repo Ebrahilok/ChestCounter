@@ -48,6 +48,28 @@ public sealed class MatchDialog : Form
         Text1(string.Join("  ·  ", facts), 9f, FontStyle.Regular, Theme.Muted);
         _y += 10;
 
+        // ---- Línea de tiempo: cuándo abriste cada cofre ------------------------------------------------------
+        if (d.Timeline.Count > 0)
+        {
+            var times = d.Timeline.Select(c => c.Seconds).ToList();
+            var busiest = times.GroupBy(t => (int)(t / 60)).OrderByDescending(gr => gr.Count()).ThenBy(gr => gr.Key).First();
+            var tl = Section(L.T("Línea de tiempo", "Timeline"),
+                L.F("1.º a los {0}", "1st at {0}", TimelineChart.Clock(times[0])), Theme.Amber);
+            var chart = new TimelineChart(d.Timeline, d.TreasureTimes, d.DurationSeconds ?? 0)
+            {
+                Location = new Point(CardPad - 4, tl.Y), Size = new Size(tl.Card.Width - 2 * CardPad + 8, 104),
+            };
+            tl.Card.Controls.Add(chart);
+            tl.Y += 110;
+            Row(tl, L.F("La mitad ({0}) ya a los {1}", "Half of them ({0}) by {1}", L.N((times.Count + 1) / 2), TimelineChart.Clock(times[(times.Count - 1) / 2])), "", Theme.Ink);
+            Row(tl, L.F("Minuto más activo: {0}–{1} ({2})", "Busiest minute: {0}–{1} ({2})", busiest.Key, busiest.Key + 1,
+                L.Count(busiest.Count(), "cofre", "cofres", "chest", "chests")), "", Theme.Ink);
+            Row(tl, L.F("Último cofre a los {0}", "Last chest at {0}", TimelineChart.Clock(times[^1])), "", Theme.Ink);
+            Row(tl, L.T("Marcas: blanco normal · cian raro · ámbar especial", "Ticks: white normal · cyan rare · amber special"), "", Theme.Muted);
+            Row(tl, L.T("rojo = roto en vez de abierto · ◆ tesoro", "red = broken instead of opened · ◆ treasure"), "", Theme.Muted);
+            EndSection(tl);
+        }
+
         // ---- Tú ----------------------------------------------------------------------------------------
         var you = Section(L.T("Tú", "You"), L.Count(row.Chests, "cofre", "cofres", "chest", "chests"), Theme.Amber);
         if (d.MyChests.Count == 0)

@@ -21,6 +21,12 @@ public sealed record MonitorState(OverlayView View, IReadOnlyList<Profile> Profi
 
     /// <summary>Resultado de la última búsqueda pedida con el botón (partidas nuevas) y cuándo terminó.</summary>
     public (int Added, DateTime AtUtc)? RefreshResult { get; init; }
+
+    /// <summary>Meta diaria de cofres (0 = sin meta).</summary>
+    public int DailyGoal { get; init; }
+
+    /// <summary>«Sumar sus cofres a tu total» activado: las cifras contadas incluyen a los compañeros.</summary>
+    public bool CountsTeammates { get; init; }
 }
 
 /// <summary>Una fila de la lista de partidas de la ventana principal.</summary>
@@ -29,6 +35,18 @@ public sealed record MonitorState(OverlayView View, IReadOnlyList<Profile> Profi
 public sealed record MatchRow(DateTime Start, string Mode, int Chests, int? Placement, int? Players, int? Eliminations,
     int Treasures, bool Live, bool PirateToken, int? TeamTotal)
 {
+    /// <summary>Cofres como cuentan en el total (con las cajas y, si está activado, los de los compañeros).</summary>
+    public int Counted { get; init; }
+
+    /// <summary>Solo cofres (sin cajas) que abriste o rompiste tú: la base para la probabilidad de tesoros.</summary>
+    public int OwnChestCount { get; init; }
+
+    /// <summary>Tesoros que te salieron a ti (sin los del equipo).</summary>
+    public int OwnTreasures { get; init; }
+
+    /// <summary>Tokens de la Tienda pirata que te salieron a ti.</summary>
+    public int OwnTokens { get; init; }
+
     /// <summary>Qué se abrió y quién (para la ventana de detalle de la partida).</summary>
     public MatchDetail Detail { get; init; } = MatchDetail.Empty;
 }
@@ -45,11 +63,22 @@ public sealed record MateDetail(string Name, int Chests, IReadOnlyList<NamedCoun
 /// <summary>Un tesoro en el detalle: nombre, quién lo consiguió y si salió de un cofre dorado.</summary>
 public sealed record TreasureDetail(string Name, string Who, bool Golden, bool Mine);
 
-/// <summary>Detalle de una partida: tus cofres por tipo, otros contenedores, compañeros y tesoros.</summary>
+/// <summary>Un cofre tuyo en la línea de tiempo: segundo del replay, tipo (para el color) y si lo rompiste.</summary>
+public sealed record ChestMoment(float Seconds, string Kind, bool Destroyed);
+
+/// <summary>Un tesoro tuyo en la línea de tiempo (solo los que tienen momento).</summary>
+public sealed record TreasureMoment(float Seconds, string Name, bool Golden);
+
+/// <summary>Detalle de una partida: tus cofres por tipo, otros contenedores, compañeros, tesoros y la línea de tiempo.</summary>
 public sealed record MatchDetail(int? DurationSeconds, IReadOnlyList<NamedCount> MyChests, int Destroyed,
     IReadOnlyList<OtherCount> MyOthers, IReadOnlyList<MateDetail>? Mates, IReadOnlyList<TreasureDetail> Treasures)
 {
     public static readonly MatchDetail Empty = new(null, Array.Empty<NamedCount>(), 0, Array.Empty<OtherCount>(), null, Array.Empty<TreasureDetail>());
+
+    /// <summary>Tus cofres en orden de tiempo.</summary>
+    public IReadOnlyList<ChestMoment> Timeline { get; init; } = Array.Empty<ChestMoment>();
+
+    public IReadOnlyList<TreasureMoment> TreasureTimes { get; init; } = Array.Empty<TreasureMoment>();
 }
 
 /// <summary>Un compañero y los cofres que se le vieron abrir (un mínimo).</summary>
@@ -223,6 +252,9 @@ public sealed class Monitor
     }
 
     /// <summary>Sumar o no a tu total los cofres vistos de tus compañeros. Rehace el informe enseguida.</summary>
+    /// <summary>Meta diaria de cofres (0 = sin meta).</summary>
+    public void SetDailyGoal(int goal) => Change(c => c.DailyGoal = Math.Max(0, goal));
+
     public void SetCountTeammates(bool count)
     {
         _reportRequested = true;
@@ -533,6 +565,17 @@ public sealed class Monitor
         _shownName = shown?.Name;
         var liveAdjusted = (_tracker.LiveMatch != null && Profiles.Counted(_tracker.LiveMatch, _config)) ? Profiles.Adjust(_tracker.LiveMatch, _config) : null;
         var view = OverlayModel.Build(Profiles.View(_data, _config), liveAdjusted, _tracker.IsLive && liveAdjusted != null, Profiles.InitialChests(_data, _config));
+        var stats = BuildStats();
+        if (_config.DailyGoal > 0)
+        {
+            // Meta diaria: una columna más en el overlay («Meta hoy 120/300», con ✓ al cumplirla).
+            var done = stats.Today >= _config.DailyGoal;
+            view = view with
+            {
+                Rows = view.Rows.Append(new OverlayRow(L.T("Meta hoy", "Today's goal"),
+                    (done ? "✓ " : "") + $"{L.N(stats.Today)}/{L.N(_config.DailyGoal)}")).ToList(),
+            };
+        }
         ReportWriter.WriteOverlay(_store, view);
         ObsServer.Update(view);
         if (OperatingSystem.IsWindows() && NativeOverlay.IsRunning)
@@ -543,7 +586,7 @@ public sealed class Monitor
         var notice = _installing
             ? L.T("Descargando la actualización…", "Downloading the update…")
             : _notice ?? (_autoCloseAt != null ? L.T("Fortnite está cerrado: el contador se cierra en 30 s.", "Fortnite is closed: the counter closes in 30 s.") : null);
-        var state = new MonitorState(view, Profiles.List(_data, _config), Profiles.Current(_data, _config)?.Key, _update, notice, _autoCloseAt != null, BuildStats())
+        var state = new MonitorState(view, Profiles.List(_data, _config), Profiles.Current(_data, _config)?.Key, _update, notice, _autoCloseAt != null, stats)
         {
             Team = BuildTeam(),
             PirateTokenLive = liveAdjusted?.PirateTokenSeen == true,
@@ -552,6 +595,8 @@ public sealed class Monitor
             CheckedUtc = _checkedUtc,
             Refreshing = _refreshRequested,
             RefreshResult = _refreshResult,
+            DailyGoal = _config.DailyGoal,
+            CountsTeammates = _config.CountTeammateChests,
         };
         Changed?.Invoke(state);
     }
@@ -652,6 +697,10 @@ public sealed class Monitor
             m.PirateTokenSeen,
             team && m.Teammates is { Count: > 0 } ? m.OwnChests + m.TeammatesSeen(kinds) : null)
         {
+            Counted = m.ChestsOpened,
+            OwnChestCount = m.Chests.Count,
+            OwnTreasures = m.TreasureFinds.Count(f => f.Scope == "own"),
+            OwnTokens = m.TreasureFinds.Count(f => f.Scope == "own" && f.IsPirateToken),
             Detail = BuildDetail(m, kinds),
         };
         var rows = new List<MatchRow>();
@@ -694,7 +743,14 @@ public sealed class Monitor
                     : f.Scope == "team" ? L.T("Tu equipo", "Your team") : L.T("Sin atribuir", "Unattributed"),
                 f.FromGoldenChest, f.Scope == "own"))
             .ToList();
-        return new MatchDetail(m.DurationSeconds, mine, m.Chests.Count(c => c.Destroyed), others, mates, treasures);
+        return new MatchDetail(m.DurationSeconds, mine, m.Chests.Count(c => c.Destroyed), others, mates, treasures)
+        {
+            Timeline = m.Chests.OrderBy(c => c.TimeSeconds).Select(c => new ChestMoment(c.TimeSeconds, c.Kind, c.Destroyed)).ToList(),
+            TreasureTimes = m.TreasureFinds
+                .Where(f => f.ObtainedAtSeconds != null)
+                .Select(f => new TreasureMoment(f.ObtainedAtSeconds!.Value, f.DisplayName, f.FromGoldenChest))
+                .ToList(),
+        };
     }
 
     /// <summary>Última partida terminada del perfil mostrado.</summary>

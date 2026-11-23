@@ -26,6 +26,7 @@ public sealed class SettingsForm : Form
     private readonly PillButton[] _updates = new PillButton[UpdateModes.Length];
     private readonly TextBox _folder;
     private readonly TextBox _initial;
+    private readonly TextBox _goal;
     private bool _loading;
 
     public SettingsForm(Monitor monitor, Store store)
@@ -248,6 +249,41 @@ public sealed class SettingsForm : Form
         reset.Click += (_, _) => ResetStats();
         Controls.Add(reset);
 
+        // Meta diaria de cofres (0 = sin meta): una fila con la cifra y − / +.
+        var goalCard = AddCard(RightX, 494, RightW, 36, 12);
+        Lbl(goalCard, L.T("Meta diaria de cofres", "Daily chest goal"), 9f, FontStyle.Bold, Theme.Ink, new Point(13, 0), new Size(RightW - 150, 36), ContentAlignment.MiddleLeft);
+        _goal = new TextBox
+        {
+            BorderStyle = BorderStyle.None,
+            BackColor = Theme.Card,
+            ForeColor = Theme.Cyan,
+            Font = Theme.Text(11f, FontStyle.Bold),
+            Location = new Point(RightW - 13 - 2 * 28 - 6 - 62, 8),
+            Width = 62,
+            MaxLength = 5,
+            TextAlign = HorizontalAlignment.Right,
+            Text = config.DailyGoal > 0 ? config.DailyGoal.ToString(L.Culture) : "0",
+        };
+        goalCard.Controls.Add(_goal);
+        var goalMinus = new PillButton { Text = "−", Location = new Point(RightW - 13 - 2 * 28 - 2, 5), Size = new Size(28, 26), Radius = 8, Font = Theme.Text(10f, FontStyle.Bold) };
+        var goalPlus = new PillButton { Text = "+", Location = new Point(RightW - 13 - 28, 5), Size = new Size(28, 26), Radius = 8, Font = Theme.Text(10f, FontStyle.Bold) };
+        goalMinus.Click += (_, _) => StepGoal(-50);
+        goalPlus.Click += (_, _) => StepGoal(50);
+        goalCard.Controls.Add(goalMinus);
+        goalCard.Controls.Add(goalPlus);
+        _goal.KeyPress += (_, e) => e.Handled = !char.IsControl(e.KeyChar) && !char.IsDigit(e.KeyChar);
+        _goal.TextChanged += (_, _) =>
+        {
+            if (!_loading)
+            {
+                _monitor.SetDailyGoal(ParseGoal());
+            }
+        };
+        var goalTip = L.T("0 = sin meta. Se ve en la ventana (barra bajo «hoy») y en el overlay, y avisa al cumplirla.",
+            "0 = no goal. Shown in the window (bar under “today”) and in the overlay, with a notice when you reach it.");
+        new ToolTip().SetToolTip(_goal, goalTip);
+        foreach (Control c in goalCard.Controls) new ToolTip().SetToolTip(c, goalTip);
+
         // Cerrar, en el sitio de los botones de la ventana principal.
         var close = new PillButton
         {
@@ -464,6 +500,11 @@ public sealed class SettingsForm : Form
 
     private int ParseInitial() =>
         int.TryParse(_initial.Text, System.Globalization.NumberStyles.None, L.Culture, out var n) ? Math.Clamp(n, 0, MaxInitial) : 0;
+
+    private int ParseGoal() =>
+        int.TryParse(_goal.Text, System.Globalization.NumberStyles.None, L.Culture, out var n) ? Math.Clamp(n, 0, 99_999) : 0;
+
+    private void StepGoal(int delta) => _goal.Text = Math.Clamp(ParseGoal() + delta, 0, 99_999).ToString(L.Culture);
 
     private void StepInitial(int delta)
     {

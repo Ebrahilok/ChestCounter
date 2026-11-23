@@ -27,6 +27,10 @@ Qué cambia respecto al original:
 
 - **La lista de partidas es el centro de la ventana**: la más reciente arriba (la que estás jugando, en verde), con cuándo, modo, puesto, eliminaciones y tus cofres en grande. Se ven **todas** las partidas guardadas, no solo las últimas.
 - **Clic en una partida → detalle dentro de la app**: tus cofres por tipo (normal, raro, enterrado…), los que rompiste, cajas de munición y comida, **lo que abrió cada compañero** y los tesoros con quién los consiguió. El informe HTML solo se abre con su botón.
+- **Lista agrupada por día** («Hoy · 6 partidas · 381 cofres») y **filtros** por modo, victorias / top 10 o compañero; con filtro, el resumen se recalcula.
+- **Línea de tiempo** en el detalle de cada partida: cuándo abriste cada cofre, la mitad a qué minuto, el minuto más activo y los tesoros.
+- **Estadísticas** dentro de la app: tu suerte con los cofres (probabilidad de tesoro y de **token pirata** calculada con tus propios cofres), cofres según el puesto, por modo y con cada compañero.
+- **Meta diaria de cofres** (en Ajustes): barra bajo «hoy», columna en el overlay y aviso al cumplirla. También avisa cuando **rompes tu récord** de cofres en una partida.
 - **Botón ⟳ Actualizar** (busca partidas nuevas al momento) y el texto **«Actualizado hace X»**.
 - **Resumen con solo cuatro cifras**: total, hoy, media y tesoros. Los récords y el equipo van en la columna derecha.
 - **«≥ 36» pasa a «36+»**, explicado: es un mínimo porque tu replay solo tiene lo que pasa cerca de ti.
@@ -34,6 +38,7 @@ Qué cambia respecto al original:
 - El gráfico de 7 días ya no corta las cifras de 4 dígitos (2016 se leía «201»).
 - **Versión en carpeta (zip)** para quien tiene Smart App Control: el exe de un solo archivo no está firmado y Smart App Control lo bloquea sin opción de abrirlo.
 - Las actualizaciones automáticas vienen de **este** repositorio, no del original.
+- Todos los textos nuevos están traducidos a los 10 idiomas de la app.
 
 ChestCounter lee las repeticiones (replays) que Fortnite guarda de cada partida y lleva la cuenta de los cofres que abres, de los **tesoros de la caza del tesoro** y, si quieres, de los cofres de tus **compañeros de equipo**. Todo se guarda en tu PC: aunque Fortnite borre los replays, tu historial se conserva.
 
@@ -67,12 +72,14 @@ ChestCounter lee las repeticiones (replays) que Fortnite guarda de cada partida 
 
 - **Cabecera**: tu perfil (o un selector, si hay varias cuentas en el PC), **«Actualizado hace X»** y el botón **⟳ Actualizar**, que busca partidas nuevas al momento. Mientras juegas dice *Partida en curso*.
 - **Resumen**: cofres en total, hoy, media por partida y tesoros.
-- **Partidas** (el centro): todas tus partidas, la más reciente arriba. Cada fila: cuándo, modo, puesto (dorado = victoria, cian = top 10), eliminaciones, tesoros (💎) y tus cofres en grande. Con *Compañeros* activado, debajo va el total del equipo («equipo 72+»). Se desplaza con la rueda del ratón.
+- **Partidas** (el centro): todas tus partidas, agrupadas por día y la más reciente arriba. El botón **Filtrar** deja ver solo un modo, las victorias / el top 10 o las partidas con un compañero (vuelve a pulsarlo para quitar el filtro). Cada fila: cuándo, modo, puesto (dorado = victoria, cian = top 10), eliminaciones, tesoros (💎) y tus cofres en grande. Con *Compañeros* activado, debajo va el total del equipo («equipo 72+»). Se desplaza con la rueda del ratón.
 - **Clic en una partida**: se abre su detalle dentro de la app: tus cofres por tipo, los destruidos, otros contenedores, **lo que abrió cada compañero** (por tipo) y los tesoros con quién los consiguió.
 - **Últimos 7 días**: un gráfico con los cofres de cada día.
 - **Récords** (o **Equipo**, con *Compañeros* activado): mejor día, mejor partida y partidas jugadas; o tus cofres y los de cada compañero en la partida actual o la última.
 - **Horas del tesoro** (más probabilidad de tesoros): la franja de abajo dice cuándo es la próxima, en tu hora local. El día que hay una, junto al perfil aparece una cuenta atrás; durante la hora, la ventana, el overlay y la página de OBS se ponen dorados y el título cuenta el tiempo que queda.
-- **Botones**: **Overlay** (punto verde = activado), **Informe** y **Ajustes**.
+- **Estadísticas**: probabilidad de tesoro y de token pirata con tus cofres (Epic no publica las cifras: es una estimación con tus datos; sin ningún token todavía, da un límite), cofres según el puesto (¿más cofres = mejor puesto?), por modo y con cada compañero (clic en uno para ver vuestras partidas).
+- **Meta diaria**: ponla en Ajustes; se ve como barra bajo «hoy» y en el overlay, y te avisa al cumplirla. Al batir tu récord de cofres en una partida también sale un aviso.
+- **Botones**: **Estadísticas**, **Overlay** (punto verde = activado), **Informe** y **Ajustes**.
 - **♥** (arriba a la derecha): un mensaje de agradecimiento, con el código de creador **DOOFY**.
 
 La ventana se puede redimensionar y maximizar: todo crece en proporción.

@@ -227,6 +227,9 @@ public sealed class Config
     public bool CountTeammateChests { get; set; }
     public bool CountTeammateTreasures { get; set; }
 
+    /// <summary>Meta diaria de cofres (0 = sin meta). Se ve en la ventana (barra bajo «hoy») y en el overlay.</summary>
+    public int DailyGoal { get; set; }
+
     /// <summary>Non-chest kinds the player chose to add to the chest total.</summary>
     public IReadOnlyCollection<string> ExtraKinds()
     {

@@ -135,8 +135,18 @@ public sealed class PillButton : Button
         g.FillPath(fill, path);
         if (_indicator is not { } dot)
         {
-            TextRenderer.DrawText(g, Text, Font, ClientRectangle, ForeColor,
+            // Texto largo (otros idiomas): letra más pequeña hasta que quepa, sin cortarlo.
+            var room = Width - Height * 0.3f;
+            var font = Font;
+            for (var i = 0; i < 6 && TextRenderer.MeasureText(g, Text, font, Size.Empty, TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Width > room && font.Size > 6f; i++)
+            {
+                var smaller = new Font(Font.FontFamily, font.Size * 0.92f, Font.Style, Font.Unit);
+                if (!ReferenceEquals(font, Font)) font.Dispose();
+                font = smaller;
+            }
+            TextRenderer.DrawText(g, Text, font, ClientRectangle, ForeColor,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis);
+            if (!ReferenceEquals(font, Font)) font.Dispose();
             return;
         }
 
@@ -420,5 +430,59 @@ public sealed class DarkMenuRenderer : ToolStripProfessionalRenderer
         public override Color ImageMarginGradientEnd => Theme.Panel;
         public override Color SeparatorDark => Theme.Line;
         public override Color SeparatorLight => Theme.Panel;
+    }
+}
+
+/// <summary>Barra fina de progreso (meta diaria): fondo gris, relleno cian y verde al llegar al 100 %.</summary>
+[SupportedOSPlatform("windows")]
+public sealed class GoalBar : Control
+{
+    private float _value;
+
+    public GoalBar()
+    {
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
+        BackColor = Theme.Card;
+        ForeColor = Theme.Cyan;
+    }
+
+    /// <summary>Verde al llegar al 100 % (meta cumplida). Desactivado en barras de comparación.</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool GreenWhenFull { get; set; } = true;
+
+    /// <summary>De 0 a 1.</summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public float Value
+    {
+        get => _value;
+        set
+        {
+            var v = Math.Clamp(value, 0f, 1f);
+            if (Math.Abs(v - _value) > 0.001f)
+            {
+                _value = v;
+                Invalidate();
+            }
+        }
+    }
+
+    protected override void OnPaintBackground(PaintEventArgs e) => e.Graphics.Clear(Parent?.BackColor ?? BackColor);
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        var r = Height / 2f;
+        using (var track = new SolidBrush(Theme.Line))
+        using (var path = Shape.Rounded(new RectangleF(0, 0, Width - 1, Height - 1), r))
+        {
+            g.FillPath(track, path);
+        }
+        if (_value > 0)
+        {
+            using var fill = new SolidBrush(_value >= 1f && GreenWhenFull ? Theme.Mint : ForeColor);
+            using var path = Shape.Rounded(new RectangleF(0, 0, Math.Max(Height, (Width - 1) * _value), Height - 1), r);
+            g.FillPath(fill, path);
+        }
     }
 }
