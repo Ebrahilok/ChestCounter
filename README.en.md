@@ -78,10 +78,13 @@ ChestCounter reads the replays Fortnite saves of every match and keeps count of 
 - **Last 7 days**: a chart with each day's chests.
 - **Records** (or **Team**, with *Teammates* on): best day, best match and matches played; or your chests and each teammate's in the current or last match.
 - **Treasure Hours** (better treasure odds): the bottom strip shows when the next one is, in your local time. On a day with one, a countdown appears next to the profile; during the hour, the window, the overlay and the OBS page turn gold and the title counts down the time left.
-- **Stats**: treasure and pirate token odds from your chests (Epic doesn't publish the figures: it's an estimate from your data; with no token yet, it gives an upper bound), chests by placement (more chests = better placement?), by mode and with each teammate (click one to see your matches together).
+- **Stats**: your treasure luck (from your own chests) and **pirate token** odds (Epic's rate: 1 in 137,500 per chest, ×1.5 during Treasure Hour), chests by placement (more chests = better placement?), by mode and with each teammate (click one to see your matches together).
+- **Token strip** (bottom): token odds for your last match (and the current one while you play) and for today; underneath, the overall estimate (everything the counter counts: your chests, boxes and your teammates'), the personal one (your chests only) and the next Treasure Hour.
 - **Daily goal**: set it in Settings; it shows as a bar under "today" and in the overlay, with a notice when you reach it. Beating your record for chests in one match also shows a notice.
 - **Buttons**: **Stats**, **Overlay** (green dot = on), **Report** and **Settings**.
 - **♥** (top right): a thank-you message, with the creator code **DOOFY**.
+
+<p align="center"><img src="docs/match-detail.png" alt="Match details: timeline and your chests" width="400">&nbsp;&nbsp;<img src="docs/stats.png" alt="Stats: luck, chests by placement and by mode" width="400"></p>
 
 The window can be resized and maximized: everything grows in proportion.
 
@@ -140,10 +143,11 @@ With **Add their chests to your total** (also off), your total, average, records
 
 ## The overlay
 
-<p align="center"><img src="docs/overlay-espera.png" alt="Overlay between two matches" width="300">&nbsp;&nbsp;<img src="docs/overlay-en-vivo.png" alt="Overlay live during a match" width="300"></p>
+<p align="center"><img src="docs/overlay-espera.png" alt="Overlay between matches, with token odds and the daily goal" width="460"></p>
 
 - **Big numbers**: your chest **total** and, in the box, the **previous** match (or the **current** one, live, while you play).
-- **Session**, session **average**, **previous** (during a match) and **treasures**.
+- **Session** (since you opened Fortnite), session **average**, **previous** (during a match) and **treasures**.
+- **Token**: overall estimate, the current match (while you play) and the previous one. **Today's goal**, if you set a daily goal.
 
 To see it over the game, set Fortnite to **Windowed Fullscreen** (*Settings → Video → Window Mode*): in exclusive fullscreen Windows cannot draw on top. The overlay starts **off**: turn it on with the **Overlay** button or Ctrl+Shift+O.
 

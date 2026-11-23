@@ -12,7 +12,7 @@ namespace ChestCounter;
 [SupportedOSPlatform("windows")]
 public sealed class StatsDialog : Form
 {
-    private const int W = 500, Pad = 18, CardPad = 14;
+    private const int W = 560, Pad = 18, CardPad = 14;
     private readonly Panel _scroll;
     private int _y;
 
@@ -191,6 +191,7 @@ public sealed class StatsDialog : Form
     private void AddModes(List<MatchRow> rows)
     {
         var modes = rows.GroupBy(r => r.Mode).OrderByDescending(g => g.Count()).ToList();
+        ColW = 62;
         var b = Section(L.T("Por modo", "By mode"), L.Count(modes.Count, "modo", "modos", "mode", "modes"));
         Header(b, L.T("Modo", "Mode"), L.T("Partidas", "Matches"), L.T("Media", "Average"), L.T("Récord", "Best"), L.T("Victorias", "Wins"));
         foreach (var g in modes)
@@ -202,6 +203,7 @@ public sealed class StatsDialog : Form
                 wins > 0 ? L.N(wins) : "—",
             });
         }
+        ColW = 84;
         End(b);
     }
 
@@ -280,7 +282,7 @@ public sealed class StatsDialog : Form
     }
 
     // Columnas: nombre (resto del ancho) y hasta 4 cifras de 62 px, alineadas a la derecha.
-    private const int ColW = 74;
+    private static int ColW = 84; // la tabla de modos usa columnas más estrechas (nombres largos)
 
     private static int NameWidth(Block b, int columns) => b.Card.Width - 2 * CardPad - columns * ColW;
 

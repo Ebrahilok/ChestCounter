@@ -78,10 +78,13 @@ ChestCounter lee las repeticiones (replays) que Fortnite guarda de cada partida 
 - **Últimos 7 días**: un gráfico con los cofres de cada día.
 - **Récords** (o **Equipo**, con *Compañeros* activado): mejor día, mejor partida y partidas jugadas; o tus cofres y los de cada compañero en la partida actual o la última.
 - **Horas del tesoro** (más probabilidad de tesoros): la franja de abajo dice cuándo es la próxima, en tu hora local. El día que hay una, junto al perfil aparece una cuenta atrás; durante la hora, la ventana, el overlay y la página de OBS se ponen dorados y el título cuenta el tiempo que queda.
-- **Estadísticas**: probabilidad de tesoro y de token pirata con tus cofres (Epic no publica las cifras: es una estimación con tus datos; sin ningún token todavía, da un límite), cofres según el puesto (¿más cofres = mejor puesto?), por modo y con cada compañero (clic en uno para ver vuestras partidas).
+- **Estadísticas**: tu suerte con los tesoros (con tus propios cofres) y con el **token pirata** (tasa de Epic: 1 de cada 137.500 por cofre, ×1,5 en la Hora del tesoro), cofres según el puesto (¿más cofres = mejor puesto?), por modo y con cada compañero (clic en uno para ver vuestras partidas).
+- **Franja del token** (abajo): probabilidad de token de la última partida (y de la actual, mientras juegas) y la de hoy; debajo, el total estimado (todo lo que cuenta el contador: tus cofres, cajas y los de tus compañeros), el personal (solo tus cofres) y la próxima Hora del tesoro.
 - **Meta diaria**: ponla en Ajustes; se ve como barra bajo «hoy» y en el overlay, y te avisa al cumplirla. Al batir tu récord de cofres en una partida también sale un aviso.
 - **Botones**: **Estadísticas**, **Overlay** (punto verde = activado), **Informe** y **Ajustes**.
 - **♥** (arriba a la derecha): un mensaje de agradecimiento, con el código de creador **DOOFY**.
+
+<p align="center"><img src="docs/match-detail.png" alt="Detalle de una partida: línea de tiempo y tus cofres" width="400">&nbsp;&nbsp;<img src="docs/stats.png" alt="Estadísticas: suerte, cofres según el puesto y por modo" width="400"></p>
 
 La ventana se puede redimensionar y maximizar: todo crece en proporción.
 
@@ -144,10 +147,11 @@ Con **Sumar sus cofres a tu total** (también desactivado), tu total, media, ré
 
 ## El overlay
 
-<p align="center"><img src="docs/overlay-espera.png" alt="Overlay entre dos partidas" width="300">&nbsp;&nbsp;<img src="docs/overlay-en-vivo.png" alt="Overlay en directo durante una partida" width="300"></p>
+<p align="center"><img src="docs/overlay-espera.png" alt="Overlay entre dos partidas, con la probabilidad de token y la meta diaria" width="460"></p>
 
 - **Cifras grandes**: tu **total** de cofres y, en el recuadro, la partida **anterior** (o la **actual**, en directo, mientras juegas).
-- **Sesión**, **media** de la sesión, **anterior** (durante una partida) y **tesoros**.
+- **Sesión** (desde que abriste Fortnite), **media** de la sesión, **anterior** (durante una partida) y **tesoros**.
+- **Token**: total estimado, la partida actual (mientras juegas) y la anterior. **Meta hoy**, si pusiste una meta diaria.
 
 Para verlo sobre el juego, pon Fortnite en **Pantalla completa en ventana** (*Ajustes → Vídeo → Modo de ventana*): en pantalla completa exclusiva, Windows no puede dibujar nada encima. El overlay viene **desactivado**: actívalo con el botón **Overlay** o con Ctrl+Mayús+O.
 
