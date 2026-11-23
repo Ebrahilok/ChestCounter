@@ -100,7 +100,16 @@ internal static class Program
             combined.Save(Path.Combine(output, "main-token-team.png"));
             var noToken = state with { Stats = ChestStats.Empty };
             typeof(MainForm).GetMethod("Render", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(main, new object[] { noToken });
-            Check(main.ClientSize.Height == 382, "Persistent token status is missing");
+            var oddsLabel = (Label)typeof(MainForm).GetField("_pirateLabel", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(main)!;
+            Check(oddsLabel.Visible && !string.IsNullOrWhiteSpace(oddsLabel.Text), "Persistent token status is missing");
+            var liveOdds = noToken with { TokenLive = 0, TokenToday = 0.0012, TokenAllTime = 0.125 };
+            typeof(MainForm).GetMethod("Render", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(main, new object[] { liveOdds });
+            var totalsLabel = (Label)typeof(MainForm).GetField("_pirateTotals", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(main)!;
+            Check(oddsLabel.Text.Contains(TokenOdds.MatchPercent(0))
+                && oddsLabel.Text.Contains(TokenOdds.Percent(liveOdds.TokenToday))
+                && totalsLabel.Text.Contains(TokenOdds.Percent(liveOdds.TokenAllTime))
+                && oddsLabel.Bottom <= totalsLabel.Top, "Match or cumulative token odds are missing");
+            Check(Math.Abs(TokenOdds.ForUntimedChests(1) - TokenOdds.PerChest(false)) < 1e-12, "Initial chests should use the base rate");
             using var emptyToken = new Bitmap(main.Width, main.Height);
             main.DrawToBitmap(emptyToken, new Rectangle(Point.Empty, emptyToken.Size));
             emptyToken.Save(Path.Combine(output, "main-token-empty.png"));

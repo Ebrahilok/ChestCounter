@@ -2,8 +2,7 @@ namespace ChestCounter;
 
 /// <summary>
 /// Probabilidad de sacar el token de la Tienda pirata (acceso a la tienda) con los cofres abiertos.
-/// Epic no publica la cifra: se usa 1 entre 137.500 por cofre (dato indicado por el usuario del fork, de la
-/// comunidad; cámbialo aquí si se conoce uno mejor). Durante la Hora del tesoro el acceso a la Tienda pirata es ×1,5.
+/// Epic publica una tasa base de 1 entre 137.500 por cofre y un multiplicador de ×1,5 durante la Hora del tesoro.
 /// Cada cofre es un intento independiente: P(al menos uno) = 1 − Π(1 − pᵢ).
 /// </summary>
 public static class TokenOdds
@@ -30,6 +29,10 @@ public static class TokenOdds
         }
         return (1 - miss, hour);
     }
+
+    public static double ForUntimedChests(int count) => 1 - Math.Pow(1 - PerChest(false), count);
+
+    public static string MatchPercent(double chance) => (chance * 100).ToString("F4", L.Culture) + " %";
 
     /// <summary>Al menos un token en varias partidas.</summary>
     public static double Combine(IEnumerable<double> chances) => 1 - chances.Aggregate(1.0, (miss, p) => miss * (1 - p));

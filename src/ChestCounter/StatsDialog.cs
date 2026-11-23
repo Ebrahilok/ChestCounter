@@ -103,9 +103,7 @@ public sealed class StatsDialog : Form
     // ---- Secciones -------------------------------------------------------------------------------------------
 
     /// <summary>
-    /// Probabilidad de tesoro y de token pirata por cofre, calculada con tus propios cofres (Epic no publica las
-    /// cifras). Sin ningún token todavía, se da un límite: con 0 casos en N intentos, la probabilidad real es casi
-    /// seguro (95 %) menor que 3/N («regla del tres»).
+    /// Probabilidad de tesoro observada y probabilidad de token según la tasa oficial de Epic.
     /// </summary>
     private void AddLuck(List<MatchRow> rows)
     {
@@ -132,27 +130,11 @@ public sealed class StatsDialog : Form
             Line(b, L.F("Algún tesoro ({0} en total)", "Any treasure ({0} in total)", L.N(treasures)), Pct(p), Pct(AtLeastOne(p, perMatch)), Theme.Rose);
             Note(b, L.F("Te sale un tesoro en {0} cofres.", "You get a treasure in {0} chests.", OneIn(p).ToLower(L.Culture)), Theme.Muted);
         }
-        if (tokens > 0)
-        {
-            var p = (double)tokens / chests;
-            Line(b, L.F("Token pirata ({0})", "Pirate token ({0})", L.N(tokens)), Pct(p), Pct(AtLeastOne(p, perMatch)), Theme.Amber);
-            Note(b, L.F("Unos {0} cofres por token. Probabilidad de que te salga al menos uno en los próximos 100 cofres: {1}.",
-                "About {0} chests per token. Chance of getting at least one in your next 100 chests: {1}.",
-                L.N((int)Math.Round(1 / p)), Pct(AtLeastOne(p, 100))), Theme.Ink);
-        }
-        else
-        {
-            var upper = 3.0 / chests;
-            Line(b, L.T("Token pirata (ninguno aún)", "Pirate token (none yet)"), "< " + Pct(upper), "< " + Pct(AtLeastOne(upper, perMatch)), Theme.Amber);
-            Note(b, L.F("No te ha salido ninguno en {0} cofres. Con tus datos, la probabilidad por cofre es casi seguro menor que {1}: hacen falta tokens para afinar más.",
-                "You haven't got one in {0} chests. From your data, the chance per chest is almost certainly below {1}: it takes some tokens to narrow it down.",
-                L.N(chests), OneIn(upper).ToLower(L.Culture)), Theme.Ink);
-        }
         // Con la tasa de 1/137.500 (×1,5 en la Hora del tesoro): lo que se esperaba frente a lo que salió.
         var expected = rows.Sum(r => r.TokenChance);
         var anyChance = TokenOdds.Combine(rows.Select(r => r.TokenChance));
         b.Y += 2;
-        Line(b, L.F("Con 1 de cada {0} por cofre", "At 1 in {0} per chest", TokenOdds.OneInChests.ToString("#,0", L.Culture)),
+        Line(b, L.F("Tasa de Epic: 1 de cada {0}", "Epic rate: 1 in {0}", TokenOdds.OneInChests.ToString("#,0", L.Culture)),
             "1/" + TokenOdds.OneInChests.ToString("#,0", L.Culture), TokenOdds.Percent(rows.Count > 0 ? expected / rows.Count : 0), Theme.Amber);
         Note(b, (tokens == 0
                 ? L.F("Con tus {0} cofres tenías un {1} de sacar al menos un token (se esperaban {2}). Te han salido 0: es lo normal.",
@@ -163,8 +145,8 @@ public sealed class StatsDialog : Form
                     L.N(chests), TokenOdds.Percent(anyChance), expected.ToString("0.###", L.Culture), L.N(tokens), (tokens / Math.Max(expected, 1e-9)).ToString("0", L.Culture)))
             + " " + L.F("Para un 50 % de opciones harían falta unos {0} cofres.", "For a 50% chance you'd need about {0} chests.",
                 ((int)Math.Round(Math.Log(0.5) / Math.Log(1 - TokenOdds.PerChest(false)))).ToString("#,0", L.Culture)), Theme.Ink);
-        Note(b, L.T("Calculado con tus cofres y tus tesoros: Epic no publica las probabilidades. Más cofres = estimación más fiable. En la Hora del tesoro, el acceso a la Tienda pirata es ×1,5.",
-            "Worked out from your own chests and treasures: Epic doesn't publish the odds. More chests = a more reliable estimate. During Treasure Hour, Pirate Shop access is ×1.5."), Theme.Muted);
+        Note(b, L.T("Epic publica la tasa por cofre y el multiplicador ×1,5 durante la Hora del tesoro.",
+            "Epic publishes the per-chest rate and the 1.5× Treasure Hour multiplier."), Theme.Muted);
         End(b);
     }
 

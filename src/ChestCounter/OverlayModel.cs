@@ -26,7 +26,8 @@ public static class OverlayModel
         var liveTreasures = live?.TreasureFinds.Count ?? 0;
 
         var total = d.Matches.Sum(m => m.ChestsOpened) + liveChests + Math.Max(0, initialChests);
-        var session = d.Matches.Where(ReportWriter.IsThisSession).ToList();
+        var sessionStart = ReportWriter.SessionStartUtc;
+        var session = d.Matches.Where(m => ReportWriter.IsThisSession(m, sessionStart)).ToList();
         var rows = new List<OverlayRow>();
 
         // Sesión: cofres, y debajo "n partidas · media x" (partidas terminadas de esta sesión).

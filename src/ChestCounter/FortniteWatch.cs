@@ -19,6 +19,29 @@ public static class FortniteWatch
     private static readonly string[] GameProcesses =
         { Environment.GetEnvironmentVariable("CHESTCOUNTER_GAME_PROCESS") is { Length: > 0 } test ? test : "FortniteClient-Win64-Shipping" };
 
+    public static DateTime? GameStartUtc()
+    {
+        DateTime? start = null;
+        foreach (var name in GameProcesses)
+        {
+            foreach (var process in Process.GetProcessesByName(name))
+            {
+                using (process)
+                {
+                    try
+                    {
+                        var candidate = process.StartTime.ToUniversalTime();
+                        if (start == null || candidate < start.Value)
+                            start = candidate;
+                    }
+                    catch (InvalidOperationException) { }
+                    catch (System.ComponentModel.Win32Exception) { }
+                }
+            }
+        }
+        return start;
+    }
+
     public static bool IsFortniteRunning()
     {
         foreach (var name in GameProcesses)

@@ -75,13 +75,16 @@ public sealed record ScanProgress(int Done, int Total);
 
 public static class ReportWriter
 {
-    public static readonly DateTime SessionStartUtc = DateTime.UtcNow;
+    private static readonly DateTime AppStartUtc = DateTime.UtcNow;
+
+    public static DateTime SessionStartUtc =>
+        (OperatingSystem.IsWindows() ? FortniteWatch.GameStartUtc() : null) ?? AppStartUtc;
 
     /// <summary>Set while several replays are being analyzed: the report shows a loading card and refreshes faster.</summary>
     public static volatile ScanProgress? Progress;
 
-    /// <summary>A match belongs to this session if it ended after the tool was started (backlog replays do not count).</summary>
-    public static bool IsThisSession(MatchRecord m)
+    /// <summary>A match belongs to this session if it ended after Fortnite started, or after ChestCounter started when Fortnite is closed (backlog replays do not count).</summary>
+    public static bool IsThisSession(MatchRecord m, DateTime sessionStartUtc)
     {
         var start = m.MatchStartUtc ?? m.AnalyzedAtUtc;
         if (start.Kind == DateTimeKind.Unspecified)
@@ -89,7 +92,7 @@ public static class ReportWriter
             start = DateTime.SpecifyKind(start, DateTimeKind.Utc);
         }
         var end = start.ToUniversalTime().AddSeconds(m.DurationSeconds ?? 0);
-        return end >= SessionStartUtc.AddMinutes(-2);
+        return end >= sessionStartUtc.AddMinutes(-2);
     }
 
     private static CultureInfo Loc => L.Culture;
@@ -365,7 +368,8 @@ public static class ReportWriter
         var avg = matches.Count > 0 ? (double)countedChests / matches.Count : 0;
         var best = matches.Count > 0 ? matches.Max(m => m.ChestsOpened) : 0;
         var treasures = matches.Sum(m => m.TreasureFinds.Count);
-        var sessionMatches = matches.Where(IsThisSession).ToList();
+        var sessionStart = SessionStartUtc;
+        var sessionMatches = matches.Where(m => IsThisSession(m, sessionStart)).ToList();
         var session = sessionMatches.Sum(m => m.ChestsOpened);
         var wins = matches.Count(m => m.Placement == 1);
         var player = matches.Select(m => m.PlayerName).FirstOrDefault(n => !string.IsNullOrEmpty(n)) ?? "";

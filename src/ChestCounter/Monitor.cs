@@ -36,6 +36,10 @@ public sealed record MonitorState(OverlayView View, IReadOnlyList<Profile> Profi
 
     /// <summary>Probabilidad de al menos un token con los cofres de hoy (con la partida en curso).</summary>
     public double TokenToday { get; init; }
+
+    public double TokenAllTime { get; init; }
+
+    public double TokenOverall { get; init; }
 }
 
 /// <summary>Una fila de la lista de partidas de la ventana principal.</summary>
@@ -579,23 +583,44 @@ public sealed class Monitor
         _shownKey = shown?.Key;
         _shownName = shown?.Name;
         var liveAdjusted = (_tracker.LiveMatch != null && Profiles.Counted(_tracker.LiveMatch, _config)) ? Profiles.Adjust(_tracker.LiveMatch, _config) : null;
-        var view = OverlayModel.Build(Profiles.View(_data, _config), liveAdjusted, _tracker.IsLive && liveAdjusted != null, Profiles.InitialChests(_data, _config));
+        var profileView = Profiles.View(_data, _config);
+        var initialChests = Profiles.InitialChests(_data, _config);
+        var view = OverlayModel.Build(profileView, liveAdjusted, _tracker.IsLive && liveAdjusted != null, initialChests);
         var stats = BuildStats();
 
-        // Probabilidad de token: la partida en curso, la última terminada y todo lo de hoy.
-        var shownMatches = Profiles.View(_data, _config).Matches;
-        var lastMatch = shownMatches.OrderByDescending(m => m.MatchStartUtc ?? m.AnalyzedAtUtc).FirstOrDefault();
+        var matchOdds = profileView.Matches
+            .Select(m => (Start: m.MatchStartUtc ?? m.AnalyzedAtUtc, TokenOdds.ForMatch(m).Chance))
+            .ToList();
         double? tokenLive = liveAdjusted != null && _tracker.IsLive ? TokenOdds.ForMatch(liveAdjusted).Chance : null;
-        double? tokenLast = lastMatch != null ? TokenOdds.ForMatch(lastMatch).Chance : null;
-        var today = DateTime.Now.Date;
-        var tokenToday = TokenOdds.Combine(shownMatches
-            .Where(m => (m.MatchStartUtc ?? m.AnalyzedAtUtc).ToLocalTime().Date == today)
-            .Select(m => TokenOdds.ForMatch(m).Chance)
-            .Append(tokenLive ?? 0));
-        if ((tokenLive ?? tokenLast) is { } shownToken)
+        double? tokenLast = matchOdds.Count > 0 ? matchOdds.MaxBy(x => x.Start).Chance : null;
+        var today = DateTime.Today;
+        var liveToday = liveAdjusted is { } live && (live.MatchStartUtc ?? live.AnalyzedAtUtc).ToLocalTime().Date == today;
+        var tokenToday = TokenOdds.Combine(matchOdds
+            .Where(x => x.Start.ToLocalTime().Date == today)
+            .Select(x => x.Chance)
+            .Append(liveToday ? tokenLive ?? 0 : 0));
+        var tokenAllTime = TokenOdds.Combine(matchOdds.Select(x => x.Chance)
+            .Append(tokenLive ?? 0)
+            .Append(TokenOdds.ForUntimedChests(initialChests)));
+        // The full counter can include teammates and other containers. Treat those extra counts
+        // as base-rate chests for the counter-based estimate, since their opening times are unknown.
+        var extraCount = profileView.Matches.Sum(m => m.ChestsOpened - m.Chests.Count)
+            + (tokenLive.HasValue && liveAdjusted is { } active ? active.ChestsOpened - active.Chests.Count : 0);
+        var tokenOverall = TokenOdds.Combine(new[] { tokenAllTime, TokenOdds.ForUntimedChests(Math.Max(0, extraCount)) });
+        if (initialChests > 0 || matchOdds.Count > 0 || tokenLive.HasValue)
         {
-            // Overlay: probabilidad de token de la partida actual (o de la anterior entre partidas).
-            view = view with { Rows = view.Rows.Append(new OverlayRow(L.T("Prob. token", "Token odds"), TokenOdds.Percent(shownToken))).ToList() };
+            view = view with { Rows = view.Rows.Append(new OverlayRow(
+                L.T("Token · total estimado", "Token · overall est."), TokenOdds.Percent(tokenOverall))).ToList() };
+        }
+        if (tokenLive is { } liveChance)
+        {
+            view = view with { Rows = view.Rows.Append(new OverlayRow(
+                L.T("Token · actual", "Token · live"), TokenOdds.MatchPercent(liveChance))).ToList() };
+        }
+        if (tokenLast is { } lastChance)
+        {
+            view = view with { Rows = view.Rows.Append(new OverlayRow(
+                L.T("Token · anterior", "Token · last"), TokenOdds.MatchPercent(lastChance))).ToList() };
         }
         if (_config.DailyGoal > 0)
         {
@@ -630,6 +655,8 @@ public sealed class Monitor
             TokenLive = tokenLive,
             TokenLast = tokenLast,
             TokenToday = tokenToday,
+            TokenAllTime = tokenAllTime,
+            TokenOverall = tokenOverall,
             CountsTeammates = _config.CountTeammateChests,
         };
         Changed?.Invoke(state);
