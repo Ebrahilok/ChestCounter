@@ -9,6 +9,44 @@ public sealed record MonitorState(OverlayView View, IReadOnlyList<Profile> Profi
     public TeamSummary? Team { get; init; }
     public bool PirateTokenLive { get; init; }
     public string? TokenDetails { get; init; }
+
+    /// <summary>Partidas recientes del perfil mostrado, la más nueva primero (la partida en curso, si la hay, va arriba).</summary>
+    public IReadOnlyList<MatchRow> Recent { get; init; } = Array.Empty<MatchRow>();
+
+    /// <summary>Última vez que se buscaron replays nuevos (UTC), o null si todavía no se ha buscado.</summary>
+    public DateTime? CheckedUtc { get; init; }
+
+    /// <summary>Hay una búsqueda pedida con el botón «Actualizar» que todavía no ha terminado.</summary>
+    public bool Refreshing { get; init; }
+
+    /// <summary>Resultado de la última búsqueda pedida con el botón (partidas nuevas) y cuándo terminó.</summary>
+    public (int Added, DateTime AtUtc)? RefreshResult { get; init; }
+}
+
+/// <summary>Una fila de la lista de partidas de la ventana principal.</summary>
+/// <param name="Start">Inicio de la partida, hora local.</param>
+/// <param name="TeamTotal">Cofres del equipo (tú + vistos de compañeros), o null sin compañeros o con «Compañeros» desactivado.</param>
+public sealed record MatchRow(DateTime Start, string Mode, int Chests, int? Placement, int? Players, int? Eliminations,
+    int Treasures, bool Live, bool PirateToken, int? TeamTotal)
+{
+    /// <summary>Qué se abrió y quién (para la ventana de detalle de la partida).</summary>
+    public MatchDetail Detail { get; init; } = MatchDetail.Empty;
+}
+
+/// <summary>Un recuento con nombre: «Cofre raro · 2», «Caja de munición · 5».</summary>
+public sealed record NamedCount(string Name, int Count);
+
+/// <summary>Un compañero en el detalle: cofres vistos y qué abrió, por tipo.</summary>
+public sealed record MateDetail(string Name, int Chests, IReadOnlyList<NamedCount> Kinds);
+
+/// <summary>Un tesoro en el detalle: nombre, quién lo consiguió y si salió de un cofre dorado.</summary>
+public sealed record TreasureDetail(string Name, string Who, bool Golden, bool Mine);
+
+/// <summary>Detalle de una partida: tus cofres por tipo, otros contenedores, compañeros y tesoros.</summary>
+public sealed record MatchDetail(int? DurationSeconds, IReadOnlyList<NamedCount> MyChests, int Destroyed,
+    IReadOnlyList<NamedCount> MyOthers, IReadOnlyList<MateDetail>? Mates, IReadOnlyList<TreasureDetail> Treasures)
+{
+    public static readonly MatchDetail Empty = new(null, Array.Empty<NamedCount>(), 0, Array.Empty<NamedCount>(), null, Array.Empty<TreasureDetail>());
 }
 
 /// <summary>Un compañero y los cofres que se le vieron abrir (un mínimo).</summary>
@@ -225,6 +263,9 @@ public sealed class Monitor
     }
 
     private volatile string? _resetBackup;
+    private volatile bool _refreshRequested;
+    private DateTime? _checkedUtc;
+    private (int Added, DateTime AtUtc)? _refreshResult;
 
     /// <summary>
     /// Restablece las estadísticas: borra todo el historial (y los cofres de antes del contador) y empieza de cero.
@@ -376,6 +417,17 @@ public sealed class Monitor
     }
 
     /// <summary>Pide al hilo de vigilancia que publique el estado (se hace en cuanto puede).</summary>
+    /// <summary>
+    /// Botón «Actualizar»: busca ya replays terminados sin esperar al siguiente escaneo (no vuelve a analizar los que
+    /// ya están contados) y reescribe el informe.
+    /// </summary>
+    public void RefreshNow()
+    {
+        _refreshRequested = true;
+        _publishRequested = true;
+        _wake.Set();
+    }
+
     public void RequestPublish()
     {
         _publishRequested = true;
@@ -418,11 +470,20 @@ public sealed class Monitor
 
             try
             {
-                if (DateTime.UtcNow >= _nextScan)
+                var manual = _refreshRequested;
+                if (manual || DateTime.UtcNow >= _nextScan)
                 {
-                    var added = _tracker.Scan();
+                    var added = _tracker.Scan(ignoreQuietPeriod: manual);
                     var liveChanged = _tracker.UpdateLive();
                     changed |= added > 0 || liveChanged;
+                    _checkedUtc = DateTime.UtcNow;
+                    if (manual)
+                    {
+                        _refreshRequested = false;
+                        _refreshResult = (added, DateTime.UtcNow);
+                        _reportRequested = true;
+                        changed = true;
+                    }
 
                     // Partida en curso: se relee cada 15 s. Replay terminado: enseguida. Si no, un escaneo de respaldo.
                     _nextScan = DateTime.UtcNow.AddSeconds(_tracker.IsFinishing ? 2 : _tracker.HasPending ? 15 : (_watcher != null && !AutoMode ? 60 : 10));
@@ -484,6 +545,10 @@ public sealed class Monitor
             Team = BuildTeam(),
             PirateTokenLive = liveAdjusted?.PirateTokenSeen == true,
             TokenDetails = BuildTokenDetails(liveAdjusted),
+            Recent = BuildRecent(liveAdjusted != null && _tracker.IsLive ? liveAdjusted : null),
+            CheckedUtc = _checkedUtc,
+            Refreshing = _refreshRequested,
+            RefreshResult = _refreshResult,
         };
         Changed?.Invoke(state);
     }
@@ -564,6 +629,63 @@ public sealed class Monitor
             (f.Scope == "own" ? L.T("Tú", "You") : f.Scope == "team" ? L.T("Equipo", "Team")
                 : f.Scope == "nearby" ? L.T("Otro jugador observado", "Other observed player") : L.T("Sin atribuir", "Unattributed"))
             + (f.Finder == null ? "" : ": " + f.Finder)));
+    }
+
+    /// <summary>Partidas del perfil mostrado para la lista de la ventana: la partida en curso arriba y luego las 50 últimas.</summary>
+    private List<MatchRow> BuildRecent(MatchRecord? live)
+    {
+        var kinds = _config.ExtraKinds();
+        var team = _config.ShowTeammates;
+        MatchRow Row(MatchRecord m, bool isLive) => new(
+            (m.MatchStartUtc ?? m.AnalyzedAtUtc).ToLocalTime(),
+            Pretty.Playlist(m.Playlist),
+            team ? m.OwnChests : m.ChestsOpened,
+            m.Placement is > 0 ? m.Placement : null,
+            m.TotalPlayers is > 0 ? m.TotalPlayers : null,
+            m.Eliminations,
+            m.TreasureFinds.Count,
+            isLive,
+            m.PirateTokenSeen,
+            team && m.Teammates is { Count: > 0 } ? m.OwnChests + m.TeammatesSeen(kinds) : null)
+        {
+            Detail = BuildDetail(m, kinds),
+        };
+        var rows = new List<MatchRow>();
+        if (live != null)
+        {
+            rows.Add(Row(live, true));
+        }
+        rows.AddRange(Profiles.View(_data, _config).Matches
+            .OrderByDescending(x => x.MatchStartUtc ?? x.AnalyzedAtUtc)
+            .Select(m => Row(m, false))); // todas: el historial guardado no tiene límite (Fortnite sí borra replays)
+        return rows;
+    }
+
+    private static MatchDetail BuildDetail(MatchRecord m, IReadOnlyCollection<string> countedKinds)
+    {
+        static List<NamedCount> Group(IEnumerable<KeyValuePair<string, int>> items) => items
+            .Where(kv => kv.Value > 0)
+            .GroupBy(kv => L.Name(kv.Key))
+            .Select(g => new NamedCount(g.Key, g.Sum(kv => kv.Value)))
+            .OrderByDescending(c => c.Count)
+            .ToList();
+
+        var mine = Group(m.Chests.GroupBy(c => c.Kind).Select(g => new KeyValuePair<string, int>(g.Key, g.Count())));
+        var others = Group(m.OtherInteractions.Count > 0
+            ? m.OtherInteractions
+            : m.AmmoBoxesOpened > 0 ? new Dictionary<string, int> { [ChestKinds.AmmoBox] = m.AmmoBoxesOpened } : new Dictionary<string, int>());
+        var mates = m.Teammates?
+            .Select(t => new MateDetail(t.Name, MatchRecord.Seen(t, countedKinds), Group(t.Kinds)))
+            .OrderByDescending(t => t.Chests)
+            .ToList();
+        var treasures = m.AllTreasureFinds
+            .Select(f => new TreasureDetail(f.DisplayName,
+                f.Scope == "own" ? L.T("Tú", "You")
+                    : f.Finder is { Length: > 0 } who ? (f.Scope == "team" ? who : L.F("{0} (rival cercano)", "{0} (nearby rival)", who))
+                    : f.Scope == "team" ? L.T("Tu equipo", "Your team") : L.T("Sin atribuir", "Unattributed"),
+                f.FromGoldenChest, f.Scope == "own"))
+            .ToList();
+        return new MatchDetail(m.DurationSeconds, mine, m.Chests.Count(c => c.Destroyed), others, mates, treasures);
     }
 
     /// <summary>Última partida terminada del perfil mostrado.</summary>

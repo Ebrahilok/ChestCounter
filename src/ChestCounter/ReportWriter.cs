@@ -348,6 +348,8 @@ public static class ReportWriter
         tabs.forEach(function(b,i){b.addEventListener('click',function(){go(b.getAttribute('data-tab'))});
           b.addEventListener('keydown',function(e){var k=e.key==='ArrowRight'?1:e.key==='ArrowLeft'?-1:0;if(!k)return;e.preventDefault();var n=tabs[(i+k+tabs.length)%tabs.length];go(n.getAttribute('data-tab'));n.focus()})});
         [].forEach.call(d.querySelectorAll('[data-go]'),function(a){a.addEventListener('click',function(e){e.preventDefault();go(a.getAttribute('data-go'))})});
+        var u=d.getElementById('upd');function ago(){if(!u)return;var m=Math.floor((Date.now()-(+u.getAttribute('data-t')))/60000);
+          u.textContent=m<1?u.getAttribute('data-now'):m<60?u.getAttribute('data-min').replace('#',m):u.getAttribute('data-h').replace('#',Math.floor(m/60))}ago();setInterval(ago,20000);
         var y=get('cc-y',true);if(y)window.scrollTo(0,+y);addEventListener('pagehide',function(){put('cc-y',String(window.scrollY),true)});
         })();
         """;
@@ -383,7 +385,7 @@ public static class ReportWriter
             <header class="masthead">
               <div class="brand"><div class="logo">{ChestIcon}</div>
                 <div><div class="eyebrow">{(player.Length > 0 ? title : L.T("Informe", "Report"))}</div><h1>{heading}</h1></div></div>
-              <div class="upd"><span class="dot"></span>{updated}</div>
+              <div class="upd" title="{H(updated)}"><span class="dot"></span><span id="upd" data-t="{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}" data-now="{H(L.T("Datos actualizados ahora mismo", "Data updated just now"))}" data-min="{H(L.F("Datos actualizados hace {0} min", "Data updated {0} min ago", "#"))}" data-h="{H(L.F("Datos actualizados hace {0} h", "Data updated {0} h ago", "#"))}">{updated}</span></div>
             </header>
             {LoadingCard(progress)}{ProfilesLine(profiles, player)}
             """);
@@ -399,10 +401,10 @@ public static class ReportWriter
         // ---- Pestañas ---------------------------------------------------------------------------------
         var tabs = new List<(string Id, string Label, string? Count)>
         {
+            ("partidas", L.T("Partidas", "Matches"), N(matches.Count)),
             ("resumen", L.T("Resumen", "Overview"), null),
             ("cofres", L.T("Cofres", "Chests"), null),
             ("tesoros", L.T("Tesoros", "Treasures"), treasureRows.Count > 0 ? N(treasureRows.Count) : null),
-            ("partidas", L.T("Partidas", "Matches"), N(matches.Count)),
         };
         if (mates != null)
         {
@@ -423,7 +425,7 @@ public static class ReportWriter
         var matesAdded = matches.Sum(m => m.TeammatesAdded);
         if (config.CountTeammateChests && matesAdded > 0)
         {
-            initialNote += " · " + L.F("incluye ≥ {0} de tus compañeros", "includes ≥ {0} from your teammates", N(matesAdded));
+            initialNote += " · " + L.F("incluye al menos {0} de tus compañeros", "includes at least {0} from your teammates", N(matesAdded));
         }
         var winRate = matches.Count > 0 ? 100.0 * wins / matches.Count : 0;
         sb.Append($"""
@@ -484,7 +486,7 @@ public static class ReportWriter
 
         // Las últimas partidas, en corto, con enlace a la pestaña completa.
         var withMates = mates != null;
-        var shownMax = Math.Max(1, matches.Take(100).Select(m => m.ChestsOpened).DefaultIfEmpty(0).Max());
+        var shownMax = Math.Max(1, matches.Take(1000).Select(m => m.ChestsOpened).DefaultIfEmpty(0).Max());
         sb.Append($"""<section><div class="sh"><h2>{L.T("Últimas partidas", "Latest matches")}</h2>{(matches.Count > 6 ? $"<a class=\"more\" href=\"#partidas\" data-go=\"partidas\">{L.T("Ver todas", "See all")} →</a>" : "")}</div>""");
         AppendMatchTable(sb, matches.Take(6).ToList(), shownMax, withMates, extraKinds);
         sb.Append("</section></div>");
@@ -630,7 +632,7 @@ public static class ReportWriter
         sb.Append("</div>");
 
         // ================================ Partidas ================================
-        var shown = matches.Take(100).ToList();
+        var shown = matches.Take(1000).ToList(); // todo el historial guardado (antes solo 100)
         sb.Append($"""
             <div class="panel" id="t-partidas" role="tabpanel" aria-labelledby="tab-partidas">
             <section><div class="sh"><h2>{L.T("Últimas partidas", "Latest matches")}</h2><span class="meta">{(matches.Count > shown.Count ? L.F("las {0} más recientes de {1}", "latest {0} of {1}", shown.Count, N(matches.Count)) : L.Count(matches.Count, "partida", "partidas", "match", "matches"))}</span></div>
@@ -687,11 +689,11 @@ public static class ReportWriter
             var barW = (100.0 * own / Math.Max(1, chestMax)).ToString("0.##", CultureInfo.InvariantCulture);
             var team = withMates && m.Teammates is { Count: > 0 } t
                 ? "<div class=\"mates-line\">" + string.Concat(t.OrderByDescending(x => MatchRecord.Seen(x, kinds))
-                    .Select(x => $"<span class=\"chip\"><span class=\"cn\">{H(x.Name)}</span> <b>≥ {MatchRecord.Seen(x, kinds)}</b></span>")) + "</div>"
+                    .Select(x => $"<span class=\"chip\"><span class=\"cn\">{H(x.Name)}</span> <b>{MatchRecord.Seen(x, kinds)}+</b></span>")) + "</div>"
                 : "";
             var teamCell = !withMates ? ""
                 : m.Teammates is { Count: > 0 }
-                    ? $"<td class=\"r nw\"><span class=\"sm\">≥</span> <b class=\"cy\">{N0(m.OwnChests + m.TeammatesSeen(kinds))}</b></td>"
+                    ? $"<td class=\"r nw\"><b class=\"cy\">{N0(m.OwnChests + m.TeammatesSeen(kinds))}</b><span class=\"sm\">+</span></td>"
                     : "<td class=\"r\"><span class=\"muted\">—</span></td>";
             var elims = hasElims ? $"<td class=\"r\">{(m.Eliminations is int e ? N0(e) : "<span class=\"muted\">—</span>")}</td>" : "";
             sb.Append($"<tr{(m.Placement == 1 ? " class=\"won\"" : "")}><td class=\"nw\">{L.DateTimeShort(When(m))}</td><td><span class=\"badge mode\">{H(Pretty.Playlist(m.Playlist))}</span>{team}</td><td><span class=\"badge{placeClass}\">{placeText}</span></td>{elims}<td><div class=\"chests\"><span class=\"mini\"><i style=\"width:{barW}%\"></i></span><b>{own}</b></div></td>{teamCell}<td>{treasure}</td></tr>");
@@ -757,10 +759,10 @@ public static class ReportWriter
         sb.Append($"""
             <section><div class="sh"><h2>{L.T("Cofres del equipo", "Team chests")}</h2><span class="meta">{L.Count(teamMatches.Count, "partida en equipo", "partidas en equipo", "team match", "team matches")}</span></div>
             <div class="minis">
-              <div class="mini-kpi"><b class="cy"><small>≥</small>{N(teamAll)}</b><span>{L.T("cofres del equipo en total", "team chests in total")}</span></div>
-              <div class="mini-kpi"><b class="cy"><small>≥</small>{Avg(teamAll, teamMatches.Count)}</b><span>{L.T("del equipo por partida", "per match for the team")}</span></div>
+              <div class="mini-kpi"><b class="cy">{N(teamAll)}<small>+</small></b><span>{L.T("cofres del equipo en total", "team chests in total")}</span></div>
+              <div class="mini-kpi"><b class="cy">{Avg(teamAll, teamMatches.Count)}<small>+</small></b><span>{L.T("del equipo por partida", "per match for the team")}</span></div>
               <div class="mini-kpi"><b class="acc">{Avg(teamMine, teamMatches.Count)}</b><span>{L.T("tuyos por partida", "yours per match")}</span></div>
-              <div class="mini-kpi"><b><small>≥</small>{(teamAll > 0 ? (100.0 * teamMates / teamAll).ToString("0", Loc) : "0")} %</b><span>{L.T("aportan tus compañeros", "from your teammates")}</span></div>
+              <div class="mini-kpi"><b>{(teamAll > 0 ? (100.0 * teamMates / teamAll).ToString("0", Loc) : "0")} %<small>+</small></b><span>{L.T("aportan tus compañeros", "from your teammates")}</span></div>
             </div></section>
             """);
 
@@ -794,13 +796,13 @@ public static class ReportWriter
         var minAvg = all.Count(r => r.Matches >= 3) >= 3 ? 3 : 2;
         var boards = new StringBuilder();
         Board(boards, L.T("Más cofres vistos", "Most chests seen"), null, all.OrderByDescending(r => r.Chests).ThenByDescending(r => r.Matches).Take(5)
-            .Select(r => (r.Key, r.Name, (double)r.Chests, $"<small>≥</small>{N(r.Chests)}", Games(r.Matches))).ToList());
+            .Select(r => (r.Key, r.Name, (double)r.Chests, $"{N(r.Chests)}<small>+</small>", Games(r.Matches))).ToList());
         Board(boards, L.T("Mejor media por partida", "Best average per match"),
             L.F("Tu media en partidas en equipo: {0}", "Your average in team matches: {0}", Avg(teamMine, teamMatches.Count)),
             all.Where(r => r.Matches >= minAvg).OrderByDescending(r => (double)r.Chests / r.Matches).Take(5)
-                .Select(r => (r.Key, r.Name, (double)r.Chests / r.Matches, $"<small>≥</small>{((double)r.Chests / r.Matches).ToString("0.0", Loc)}", Games(r.Matches))).ToList());
+                .Select(r => (r.Key, r.Name, (double)r.Chests / r.Matches, $"{((double)r.Chests / r.Matches).ToString("0.0", Loc)}<small>+</small>", Games(r.Matches))).ToList());
         Board(boards, L.T("Récord en una partida", "Best single match"), null, all.Where(r => r.Best > 0).OrderByDescending(r => r.Best).ThenByDescending(r => r.Matches).Take(5)
-            .Select(r => (r.Key, r.Name, (double)r.Best, $"<small>≥</small>{N(r.Best)}", L.T("cofres en una partida", "chests in one match"))).ToList());
+            .Select(r => (r.Key, r.Name, (double)r.Best, $"{N(r.Best)}<small>+</small>", L.T("cofres en una partida", "chests in one match"))).ToList());
         Board(boards, L.T("Más victorias juntos", "Most wins together"), null, all.Where(r => r.Wins > 0).OrderByDescending(r => r.Wins).ThenBy(r => r.Matches).Take(5)
             .Select(r => (r.Key, r.Name, (double)r.Wins, $"🏆 {N(r.Wins)}", L.F("{0} de {1}", "{0} of {1}", Pct(r.Wins, r.Matches), Games(r.Matches)))).ToList());
         if (boards.Length > 0)
@@ -820,7 +822,7 @@ public static class ReportWriter
             foreach (var m in recentTeam)
             {
                 var mates = string.Concat(m.Teammates!.OrderByDescending(t => Seen(t)).Select(t =>
-                    $"<span class=\"chip\"><span class=\"av sm-av\" style=\"background:{Tone(t.EpicId ?? t.Name)}\">{Initial(t.Name)}</span><span class=\"cn\">{H(t.Name)}</span> <b>≥ {N(Seen(t))}</b></span>"));
+                    $"<span class=\"chip\"><span class=\"av sm-av\" style=\"background:{Tone(t.EpicId ?? t.Name)}\">{Initial(t.Name)}</span><span class=\"cn\">{H(t.Name)}</span> <b>{N(Seen(t))}+</b></span>"));
                 var total = m.OwnChests + m.TeammatesSeen(extraKinds);
                 var placeClass = m.Placement switch { 1 => " win", > 0 and <= 10 => " top", _ => "" };
                 var place = m.Placement == 1 ? "🏆 " + H(Pretty.Placement(m)) : H(Pretty.Placement(m));
@@ -828,7 +830,7 @@ public static class ReportWriter
                 var mineW = (100.0 * m.OwnChests / teamMax).ToString("0.##", CultureInfo.InvariantCulture);
                 sb.Append($"<tr><td class=\"nw\">{L.DateTimeShort(When(m))}<div class=\"sm\">{H(Pretty.Playlist(m.Playlist))}</div></td><td><span class=\"badge{placeClass}\">{place}</span></td>"
                     + $"<td class=\"r\"><b class=\"acc\">{N(m.OwnChests)}</b></td><td><div class=\"mates-line\">{mates}</div></td>"
-                    + $"<td><div class=\"teambar\"><span class=\"tb\"><i class=\"me\" style=\"width:{mineW}%\"></i><i style=\"width:{w}%\"></i></span><b class=\"cy\"><small>≥</small>{N(total)}</b></div></td></tr>");
+                    + $"<td><div class=\"teambar\"><span class=\"tb\"><i class=\"me\" style=\"width:{mineW}%\"></i><i style=\"width:{w}%\"></i></span><b class=\"cy\">{N(total)}<small>+</small></b></div></td></tr>");
             }
             sb.Append("</tbody></table></div></section>");
         }
@@ -851,10 +853,10 @@ public static class ReportWriter
             sb.Append($"""
                 <div class="mate">
                   <div class="who"><div class="av" style="background:{Tone(r.Key)}">{Initial(r.Name)}</div>
-                    <div class="grow"><div class="nm" title="{H(r.Name)}">{H(r.Name)}</div><div class="sm">{L.Count(r.Matches, "partida juntos", "partidas juntos", "match together", "matches together")} · {L.F("aporta ≥ {0} del equipo", "brings ≥ {0} of the team", Pct(r.Chests, r.Team))}</div></div></div>
+                    <div class="grow"><div class="nm" title="{H(r.Name)}">{H(r.Name)}</div><div class="sm">{L.Count(r.Matches, "partida juntos", "partidas juntos", "match together", "matches together")} · {L.F("aporta al menos {0} del equipo", "brings at least {0} of the team", Pct(r.Chests, r.Team))}</div></div></div>
                   <div class="st">
                     <div><b class="acc">{N(r.Wins)}</b><span>{L.T("victorias", "wins")} · {Pct(r.Wins, r.Matches)}</span></div>
-                    <div><b><small>≥</small>{avg.ToString("0.0", Loc)}</b><span>{L.T("cofres por partida", "chests per match")}</span></div>
+                    <div><b>{avg.ToString("0.0", Loc)}<small>+</small></b><span>{L.T("cofres por partida", "chests per match")}</span></div>
                     <div><b class="cy">{((double)r.Mine / r.Matches).ToString("0.0", Loc)}</b><span>{L.T("tu media juntos", "your average together")}</span></div>
                   </div>
                 </div>
@@ -872,9 +874,9 @@ public static class ReportWriter
             var avg = (double)r.Chests / r.Matches;
             var barW = (100.0 * avg / maxAvg).ToString("0.##", CultureInfo.InvariantCulture);
             var wins = r.Wins > 0 ? $"<span class=\"badge win\">🏆 {N(r.Wins)}</span> <span class=\"sm\">{Pct(r.Wins, r.Matches)}</span>" : "<span class=\"muted\">—</span>";
-            sb.Append($"<tr><td><div class=\"who\"><span class=\"av sm-av\" style=\"background:{Tone(r.Key)}\">{Initial(r.Name)}</span><span class=\"nm\">{H(r.Name)}</span></div></td><td class=\"r\">{N(r.Matches)}</td><td class=\"r nw\">{wins}</td><td class=\"r nw\"><span class=\"sm\">≥</span> <b>{N(r.Chests)}</b></td>"
+            sb.Append($"<tr><td><div class=\"who\"><span class=\"av sm-av\" style=\"background:{Tone(r.Key)}\">{Initial(r.Name)}</span><span class=\"nm\">{H(r.Name)}</span></div></td><td class=\"r\">{N(r.Matches)}</td><td class=\"r nw\">{wins}</td><td class=\"r nw\"><b>{N(r.Chests)}</b><span class=\"sm\">+</span></td>"
                 + $"<td><div class=\"chests\"><span class=\"mini\"><i style=\"width:{barW}%\"></i></span><b>{avg.ToString("0.0", Loc)}</b></div></td>"
-                + $"<td class=\"r\">{N(r.Best)}</td><td class=\"r nw\"><span class=\"sm\">≥</span> {Pct(r.Chests, r.Team)}</td><td class=\"r\">{((double)r.Mine / r.Matches).ToString("0.0", Loc)}</td><td class=\"nw sm\">{L.DateTimeShort(r.Last)}</td></tr>");
+                + $"<td class=\"r\">{N(r.Best)}</td><td class=\"r nw\">{Pct(r.Chests, r.Team)}<span class=\"sm\">+</span></td><td class=\"r\">{((double)r.Mine / r.Matches).ToString("0.0", Loc)}</td><td class=\"nw sm\">{L.DateTimeShort(r.Last)}</td></tr>");
         }
         if (oneOff > 0)
         {

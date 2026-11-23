@@ -6,8 +6,10 @@ using System.Windows.Forms;
 namespace ChestCounter;
 
 /// <summary>
-/// Ventana principal, horizontal 16:9 (592×332): total y partida actual, última partida, gráfico de 7 días,
-/// estadísticas en tarjetas y los botones de acción.
+/// Ventana principal (640×460). Arriba: título, perfil, cuándo se actualizó y el botón «Actualizar». Debajo, una franja
+/// con cuatro cifras (total, hoy, media, tesoros). El centro es la lista de partidas, la más reciente arriba; a su
+/// derecha, los últimos 7 días y los récords (o el equipo, con «Compañeros» activado). Abajo, la franja del token
+/// pirata / Hora del tesoro y los botones.
 /// Todo lo demás (escaneo, overlay, actualizaciones) lo hace <see cref="Monitor"/> en segundo plano.
 /// </summary>
 [SupportedOSPlatform("windows")]
@@ -15,42 +17,47 @@ public sealed class MainForm : Form
 {
     private readonly Monitor _monitor;
     private readonly Store _store;
-    private readonly Card _badgeCard, _hero;
+    private readonly Card _summary;
     private readonly Label _title;
     private bool? _treasureShown;
     private readonly Card _countCard;
     private readonly Label _countLabel;
-    private readonly ToolTip _countTip = new();
+    private readonly ToolTip _tips = new();
     private readonly System.Windows.Forms.Timer _clock = new() { Interval = 1000 };
-    private readonly Label _badge;
     private readonly Label _profileName;
     private readonly ComboBox _profile;
-    private readonly Label _total;
-    private readonly Label _totalCap;
-    private readonly Label _current;
-    private readonly Label _currentCap;
-    private readonly Label _session;
-    private readonly Label _statToday, _statBestDay, _statAverage, _statBestMatch, _statMatches, _statTreasures;
-    private readonly Label _statTodayCap, _statBestDayCap, _statAverageCap, _statBestMatchCap, _statMatchesCap, _statTreasuresCap;
+    private readonly Label _status;
+    private readonly PillButton _refresh;
+    private DateTime? _refreshClickedUtc;
+    private readonly Label _total, _today, _average, _treasures;
+    private readonly Label _todayCap;
+    private readonly Label _matchesCount;
+    private readonly MatchList _matches;
+    private readonly DailyChart _daily;
+    private readonly Card _sideCard;
+    private readonly Label _sideTitle;
+    private readonly Label[] _sideNames = new Label[SideRows], _sideValues = new Label[SideRows];
+    private const int SideRows = 4; // récords (3 filas) o equipo (tú + hasta 3 compañeros)
     private readonly Card _noticeCard;
     private readonly Label _notice;
     private readonly PillButton _update;
     private readonly PillButton _overlayButton, _reportButton, _settingsButton;
-    private readonly DailyChart _daily;
-    private readonly Label _lastValue, _lastDetail;
-    private readonly Card _teamCard, _pirateCard;
+    private readonly Card _pirateCard;
     private readonly Label _pirateLabel;
-    private bool _teamShown, _pirateShown;
-    private readonly Label _teamTitle, _teamTotal, _teamMessage;
-    private readonly Label[] _teamNames = new Label[TeamColumns], _teamValues = new Label[TeamColumns];
-    private const int TeamColumns = 4; // tú + hasta 3 compañeros (escuadrón)
     private MonitorState? _last;
     private string? _profileSig;
     private bool _ignoreProfileChange;
     private bool _autoCloseOffer;
 
-    // Disposición: 592×332 (16:9). Columna izquierda (total, última partida, gráfico) y derecha (estadísticas y botones).
-    private const int LeftX = 15, LeftW = 267, RightX = 297, RightW = 278;
+    // Disposición base 640×460: todo escala proporcionalmente al redimensionar.
+    private const int DesignW = 640, DesignH = 460;
+    private const int Pad = 16, Gap = 10;
+    private const int ListW = 382;                      // columna de la lista de partidas
+    private const int SideX = Pad + ListW + Gap;        // columna derecha
+    private const int SideW = DesignW - Pad - SideX;
+    private const int BodyY = 146, BodyH = 216;
+    private const int PirateY = BodyY + BodyH + 8, BottomY = PirateY + 40 + 8;
+    private const int ButtonW = 84, ButtonGap = 8;
 
     public MainForm(Monitor monitor, Store store)
     {
@@ -64,41 +71,14 @@ public sealed class MainForm : Form
         BackColor = Theme.Bg;
         ForeColor = Theme.Ink;
         FormBorderStyle = FormBorderStyle.Sizable;
-        MinimumSize = new Size(420, 236);
+        MinimumSize = new Size(480, 345);
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(592, 332);
+        ClientSize = new Size(DesignW, DesignH);
         Icon = AppIcon.Load();
 
-        // Cabecera: título, perfil y distintivo.
-        _title = Lbl(this, L.T("CONTADOR DE COFRES", "CHEST COUNTER"), 8.5f, FontStyle.Bold, Theme.Cyan, new Point(LeftX, 14), new Size(282, 18));
-
-        // Cuenta atrás de la Hora del tesoro de hoy, junto al título (solo el día que la hay y antes de que empiece).
-        _countCard = new Card { Location = new Point(168, 9), Size = new Size(128, 22), Radius = 11, BackColor = Theme.TreasurePanel, Visible = false };
-        _countLabel = Lbl(_countCard, "", 8.0f, FontStyle.Bold, Theme.Amber, new Point(0, 0), new Size(128, 22), ContentAlignment.MiddleCenter);
-        Controls.Add(_countCard);
-        _countCard.BringToFront(); // por encima del título, que es ancho para los textos de la Hora del tesoro
-        _clock.Tick += (_, _) => UpdateTreasureClock();
-        _clock.Start();
-        FormClosed += (_, _) => { _clock.Dispose(); _countTip.Dispose(); };
-        // Corazón: vuelve a abrir el mensaje de agradecimiento (por si se cerró sin leerlo).
-        // Solo el corazón (sin botón alrededor), más claro al pasar el ratón.
-        var thanks = new Label
-        {
-            Text = "♥", Location = new Point(550, 2), Size = new Size(32, 34), Font = Theme.Text(17f, FontStyle.Bold),
-            ForeColor = Theme.Rose, BackColor = Theme.Bg, TextAlign = ContentAlignment.MiddleCenter, Cursor = Cursors.Hand,
-            AccessibleName = L.T("Un mensaje de Doofy", "A message from Doofy"), AccessibleRole = AccessibleRole.PushButton,
-        };
-        thanks.MouseEnter += (_, _) => thanks.ForeColor = Color.FromArgb(255, 180, 205);
-        thanks.MouseLeave += (_, _) => thanks.ForeColor = Theme.Rose;
-        thanks.Click += (_, _) => ThanksDialog.Open(this);
-        new ToolTip().SetToolTip(thanks, L.T("Un mensaje de Doofy", "A message from Doofy"));
-        Controls.Add(thanks);
-
-        _badgeCard = new Card { Location = new Point(451, 9), Size = new Size(96, 22), Radius = 11, BackColor = Theme.Panel, Visible = false };
-        _badge = Lbl(_badgeCard, "", 8.0f, FontStyle.Bold, Theme.Mint, new Point(0, 0), new Size(96, 22), ContentAlignment.MiddleCenter);
-        Controls.Add(_badgeCard);
-
-        _profileName = Lbl(this, "", 8.0f, FontStyle.Regular, Theme.Muted, new Point(300, 11), new Size(145, 18), ContentAlignment.TopRight);
+        // ---- Cabecera: título y perfil a la izquierda; estado, «Actualizar» y corazón a la derecha ---------------
+        _title = Lbl(this, L.T("CONTADOR DE COFRES", "CHEST COUNTER"), 8.5f, FontStyle.Bold, Theme.Cyan, new Point(Pad, 12), new Size(300, 18));
+        _profileName = Lbl(this, "", 8.0f, FontStyle.Regular, Theme.Muted, new Point(Pad, 33), new Size(210, 18));
         _profile = new ComboBox
         {
             DropDownStyle = ComboBoxStyle.DropDownList,
@@ -106,8 +86,8 @@ public sealed class MainForm : Form
             BackColor = Theme.Panel,
             ForeColor = Theme.Ink,
             Font = Theme.Text(),
-            Location = new Point(300, 8),
-            Size = new Size(145, 24),
+            Location = new Point(Pad, 31),
+            Size = new Size(200, 24),
             Visible = false,
         };
         _profile.SelectedIndexChanged += (_, _) =>
@@ -119,89 +99,114 @@ public sealed class MainForm : Form
         };
         Controls.Add(_profile);
 
-        // Tarjeta principal: total y partida actual.
-        var hero = _hero = new Card { Location = new Point(LeftX, 40), Size = new Size(LeftW, 100), Radius = 16 };
-        Controls.Add(hero);
-        _total = Lbl(hero, "0", 28f, FontStyle.Bold, Theme.Cyan, new Point(15, 6), new Size(120, 50));
-        _totalCap = Lbl(hero, L.T("cofres en total", "chests in total"), 8.0f, FontStyle.Regular, Theme.Muted, new Point(16, 59), new Size(120, 16));
-        hero.Controls.Add(new Panel { BackColor = Theme.CardEdge, Location = new Point(138, 15), Size = new Size(1, 70) });
-        _current = Lbl(hero, "—", 28f, FontStyle.Bold, Theme.Amber, new Point(151, 6), new Size(110, 50));
-        _currentCap = Lbl(hero, L.T("última partida", "last match"), 8.0f, FontStyle.Regular, Theme.Muted, new Point(153, 59), new Size(110, 16));
-        _session = Lbl(hero, "", 8.0f, FontStyle.Regular, Theme.Ink, new Point(15, 77), new Size(243, 16));
+        // Cuenta atrás de la Hora del tesoro de hoy (solo el día que la hay y antes de que empiece).
+        _countCard = new Card { Location = new Point(230, 31), Size = new Size(128, 22), Radius = 11, BackColor = Theme.TreasurePanel, Visible = false };
+        _countLabel = Lbl(_countCard, "", 8.0f, FontStyle.Bold, Theme.Amber, new Point(0, 0), new Size(128, 22), ContentAlignment.MiddleCenter);
+        Controls.Add(_countCard);
 
-        // Última partida: cofres abiertos, con los detalles (rotos, tesoros, puesto, eliminaciones).
-        var last = new Card { Location = new Point(LeftX, 149), Size = new Size(LeftW, 50), Radius = 12 };
-        Lbl(last, L.T("Última partida", "Last match"), 7.5f, FontStyle.Regular, Theme.Muted, new Point(13, 6), new Size(101, 13));
-        _lastDetail = Lbl(last, "", 7.5f, FontStyle.Regular, Theme.Muted, new Point(101, 5), new Size(153, 15), ContentAlignment.MiddleRight);
-        _lastValue = Lbl(last, "—", 11.5f, FontStyle.Bold, Theme.Amber, new Point(13, 22), new Size(243, 22));
-        Controls.Add(last);
+        _status = Lbl(this, "", 8.0f, FontStyle.Regular, Theme.Muted, new Point(364, 14), new Size(156, 34), ContentAlignment.MiddleRight);
+        _refresh = new PillButton
+        {
+            Text = "⟳  " + L.T("Actualizar", "Refresh"), Location = new Point(526, 14), Size = new Size(90, 34), Radius = 10,
+            BackColor = Theme.Panel, Font = Theme.Text(8.5f, FontStyle.Bold),
+        };
+        _refresh.Click += (_, _) =>
+        {
+            _refreshClickedUtc = DateTime.UtcNow;
+            UpdateStatus();
+            _monitor.RefreshNow();
+        };
+        _tips.SetToolTip(_refresh, L.T("Busca ahora partidas nuevas en tus replays", "Look for new matches in your replays now"));
+        Controls.Add(_refresh);
 
-        // Gráfico de los últimos 7 días.
-        var daily = new Card { Location = new Point(LeftX, 206), Size = new Size(LeftW, 120), Radius = 14 };
-        Lbl(daily, L.T("Últimos 7 días", "Last 7 days"), 8.0f, FontStyle.Regular, Theme.Muted, new Point(13, 7), new Size(184, 13));
-        _daily = new DailyChart { Location = new Point(9, 24), Size = new Size(246, 90), BackColor = Theme.Card };
+        // Corazón: vuelve a abrir el mensaje de agradecimiento (por si se cerró sin leerlo).
+        var thanks = new Label
+        {
+            Text = "♥", Location = new Point(DesignW - 22, 0), Size = new Size(22, 22), Font = Theme.Text(10f, FontStyle.Bold),
+            ForeColor = Theme.Rose, BackColor = Theme.Bg, TextAlign = ContentAlignment.MiddleCenter, Cursor = Cursors.Hand,
+            AccessibleName = L.T("Un mensaje de Doofy", "A message from Doofy"), AccessibleRole = AccessibleRole.PushButton,
+        };
+        thanks.MouseEnter += (_, _) => thanks.ForeColor = Color.FromArgb(255, 180, 205);
+        thanks.MouseLeave += (_, _) => thanks.ForeColor = Theme.Rose;
+        thanks.Click += (_, _) => ThanksDialog.Open(this);
+        _tips.SetToolTip(thanks, L.T("Un mensaje de Doofy", "A message from Doofy"));
+        Controls.Add(thanks);
+
+        // ---- Franja de resumen: cuatro cifras, la primera (total) más grande ------------------------------------
+        _summary = new Card { Location = new Point(Pad, 62), Size = new Size(DesignW - 2 * Pad, 74), Radius = 14 };
+        Controls.Add(_summary);
+        var colW = _summary.Width / 4;
+        _total = Lbl(_summary, "0", 22f, FontStyle.Bold, Theme.Cyan, new Point(14, 4), new Size(colW - 18, 42));
+        Lbl(_summary, L.T("cofres en total", "chests in total"), 8.0f, FontStyle.Regular, Theme.Muted, new Point(17, 47), new Size(colW - 20, 16));
+        _today = SummaryFigure(1, colW, Theme.Ink, L.T("hoy", "today"), out _todayCap);
+        _average = SummaryFigure(2, colW, Theme.Ink, L.T("media por partida", "average per match"), out _);
+        _treasures = SummaryFigure(3, colW, Theme.Rose, L.T("tesoros", "treasures"), out _);
+        for (var i = 1; i < 4; i++)
+        {
+            _summary.Controls.Add(new Panel { BackColor = Theme.CardEdge, Location = new Point(i * colW, 16), Size = new Size(1, 42) });
+        }
+
+        // ---- Lista de partidas (lo principal) --------------------------------------------------------------
+        var list = new Card { Location = new Point(Pad, BodyY), Size = new Size(ListW, BodyH), Radius = 14 };
+        Lbl(list, L.T("Partidas", "Matches"), 9f, FontStyle.Bold, Theme.Ink, new Point(14, 9), new Size(140, 18));
+        _matchesCount = Lbl(list, "", 8.0f, FontStyle.Regular, Theme.Muted, new Point(ListW - 14 - 210, 10), new Size(210, 16), ContentAlignment.TopRight);
+        _matches = new MatchList { Location = new Point(4, 32), Size = new Size(ListW - 8, BodyH - 38) };
+        _matches.RowClicked += row => MatchDialog.Open(this, row, _store.ReportPath);
+        list.Controls.Add(_matches);
+        Controls.Add(list);
+
+        // ---- Columna derecha: últimos 7 días y récords / equipo -----------------------------------------------
+        var daily = new Card { Location = new Point(SideX, BodyY), Size = new Size(SideW, 112), Radius = 14 };
+        Lbl(daily, L.T("Últimos 7 días", "Last 7 days"), 8.0f, FontStyle.Regular, Theme.Muted, new Point(13, 7), new Size(SideW - 26, 14));
+        _daily = new DailyChart { Location = new Point(8, 24), Size = new Size(SideW - 16, 84), BackColor = Theme.Card, Font = Theme.Text(7f) };
         daily.Controls.Add(_daily);
         Controls.Add(daily);
 
-        _pirateCard = new Card { Location = new Point(LeftX, 334), Size = new Size(RightX + RightW - LeftX, 42), Radius = 14, BackColor = Theme.Panel, Visible = false };
-        _pirateLabel = new Label
+        _sideCard = new Card { Location = new Point(SideX, BodyY + 120), Size = new Size(SideW, BodyH - 120), Radius = 14 };
+        _sideTitle = Lbl(_sideCard, L.T("Récords", "Records"), 8.0f, FontStyle.Regular, Theme.Muted, new Point(13, 7), new Size(SideW - 26, 14));
+        for (var i = 0; i < SideRows; i++)
         {
-            Bounds = new Rectangle(13, 0, _pirateCard.Width - 26, 42), Font = Theme.Text(8.5f, FontStyle.Bold),
-            ForeColor = Theme.Amber, BackColor = _pirateCard.BackColor, TextAlign = ContentAlignment.MiddleCenter,
-            AutoEllipsis = true,
-        };
-        _pirateCard.Controls.Add(_pirateLabel);
+            var y = 26 + i * 16;
+            _sideNames[i] = Lbl(_sideCard, "", 8.5f, FontStyle.Regular, Theme.Muted, new Point(13, y), new Size(SideW - 26 - 56, 16), ContentAlignment.MiddleLeft);
+            _sideValues[i] = Lbl(_sideCard, "", 8.5f, FontStyle.Bold, Theme.Ink, new Point(SideW - 13 - 56, y), new Size(56, 16), ContentAlignment.MiddleRight);
+        }
+        Controls.Add(_sideCard);
+
+        // ---- Token pirata / Hora del tesoro (franja) ------------------------------------------------------
+        _pirateCard = new Card { Location = new Point(Pad, PirateY), Size = new Size(DesignW - 2 * Pad, 40), Radius = 12, BackColor = Theme.Panel };
+        _pirateLabel = Lbl(_pirateCard, "", 8.0f, FontStyle.Bold, Theme.Muted, new Point(13, 0), new Size(_pirateCard.Width - 26, 40), ContentAlignment.MiddleCenter);
         _pirateCard.Cursor = _pirateLabel.Cursor = Cursors.Hand;
         _pirateCard.Click += (_, _) => Open(new Uri(_store.ReportPath).AbsoluteUri + "#tesoros");
         _pirateLabel.Click += (_, _) => Open(new Uri(_store.ReportPath).AbsoluteUri + "#tesoros");
         Controls.Add(_pirateCard);
 
-        // Equipo (con «Compañeros» activado): tus cofres y los vistos de cada compañero en la partida actual o la última.
-        // Solo se ve con la opción activada; entonces la ventana crece para hacerle sitio.
-        _teamCard = new Card { Location = new Point(LeftX, 334), Size = new Size(RightX + RightW - LeftX, 74), Radius = 14, Visible = false };
-        _teamTitle = Lbl(_teamCard, L.T("Equipo", "Team"), 7.5f, FontStyle.Regular, Theme.Muted, new Point(13, 7), new Size(250, 14));
-        _teamTotal = Lbl(_teamCard, "", 8.0f, FontStyle.Bold, Theme.Ink, new Point(_teamCard.Width - 13 - 300, 6), new Size(300, 15), ContentAlignment.TopRight);
-        var colW = (_teamCard.Width - 26) / TeamColumns;
-        for (var i = 0; i < TeamColumns; i++)
-        {
-            _teamNames[i] = Lbl(_teamCard, "", 7.5f, FontStyle.Regular, Theme.Muted, new Point(13 + i * colW, 28), new Size(colW - 10, 14));
-            _teamValues[i] = Lbl(_teamCard, "", 14f, FontStyle.Bold, i == 0 ? Theme.Amber : Theme.Ink, new Point(12 + i * colW, 42), new Size(colW - 10, 26));
-        }
-        _teamMessage = Lbl(_teamCard, "", 8.0f, FontStyle.Regular, Theme.Muted, new Point(13 + colW, 28), new Size(_teamCard.Width - 26 - colW, 40), ContentAlignment.MiddleLeft);
-        Controls.Add(_teamCard);
-
-        // Rejilla de estadísticas: dos columnas, tres filas (columna derecha).
-        _statToday = Stat(L.T("Hoy", "Today"), RightX, 40, Theme.Cyan, out _statTodayCap);
-        _statBestDay = Stat(L.T("Mejor día", "Best day"), RightX + 142, 40, Theme.Amber, out _statBestDayCap);
-        _statAverage = Stat(L.T("Media por partida", "Average per match"), RightX, 117, Theme.Ink, out _statAverageCap);
-        _statBestMatch = Stat(L.T("Mejor partida", "Best match"), RightX + 142, 117, Theme.Ink, out _statBestMatchCap);
-        _statMatches = Stat(L.T("Histórico", "History"), RightX, 196, Theme.Ink, out _statMatchesCap);
-        _statTreasures = Stat(L.T("Tesoros", "Treasures"), RightX + 142, 196, Theme.Ink, out _statTreasuresCap);
-
-        // Aviso (versión nueva, cierre con Fortnite) o botón de actualizar: ocupa el sitio de los botones.
-        _noticeCard = new Card { Location = new Point(RightX, 277), Size = new Size(RightW, 40), Radius = 12, BackColor = Theme.Card, Visible = false };
-        _notice = Lbl(_noticeCard, "", 8.5f, FontStyle.Regular, Theme.AccentSoft, new Point(13, 0), new Size(RightW - 26, 40), ContentAlignment.MiddleLeft);
+        // ---- Fila inferior: aviso o actualización a la izquierda, botones a la derecha -------------------------
+        var noticeW = DesignW - 2 * Pad - 3 * ButtonW - 3 * ButtonGap;
+        _noticeCard = new Card { Location = new Point(Pad, BottomY), Size = new Size(noticeW, 38), Radius = 12, BackColor = Theme.Card, Visible = false };
+        _notice = Lbl(_noticeCard, "", 8.0f, FontStyle.Regular, Theme.AccentSoft, new Point(12, 0), new Size(noticeW - 24, 38), ContentAlignment.MiddleLeft);
         _noticeCard.Click += (_, _) => { if (_autoCloseOffer) _monitor.KeepOpen(); };
         _notice.Click += (_, _) => { if (_autoCloseOffer) _monitor.KeepOpen(); };
         Controls.Add(_noticeCard);
 
-        _update = new PillButton { Location = new Point(RightX, 277), Size = new Size(RightW, 40), Radius = 12, Visible = false, BackColor = Theme.Accent, HoverColor = Theme.AccentHover, ForeColor = Theme.AccentInk };
+        _update = new PillButton { Location = new Point(Pad, BottomY), Size = new Size(noticeW, 38), Radius = 12, Visible = false, BackColor = Theme.Accent, HoverColor = Theme.AccentHover, ForeColor = Theme.AccentInk };
         _update.Click += (_, _) => _monitor.InstallUpdate();
         Controls.Add(_update);
 
-        // Botones de acción.
-        _overlayButton = Action(L.T("Overlay", "Overlay"), RightX);
+        _overlayButton = Action(L.T("Overlay", "Overlay"), DesignW - Pad - 3 * ButtonW - 2 * ButtonGap);
         _overlayButton.Click += (_, _) => _monitor.ToggleOverlay();
-        _reportButton = Action(L.T("Informe", "Report"), RightX + 95);
+        _reportButton = Action(L.T("Informe", "Report"), DesignW - Pad - 2 * ButtonW - ButtonGap);
         _reportButton.Click += (_, _) => Open(_store.ReportPath);
-        _settingsButton = Action(L.T("Ajustes", "Settings"), RightX + 190);
+        _settingsButton = Action(L.T("Ajustes", "Settings"), DesignW - Pad - ButtonW);
         _settingsButton.Click += (_, _) =>
         {
             using var dialog = new SettingsForm(_monitor, _store);
             dialog.ShowDialog(this);
         };
 
-        // Diseño base (592×332): al redimensionar o maximizar, todos los controles y fuentes escalan proporcionalmente.
+        _clock.Tick += (_, _) => { UpdateTreasureClock(); UpdateStatus(); };
+        _clock.Start();
+        FormClosed += (_, _) => { _clock.Dispose(); _tips.Dispose(); };
+
         CaptureLayout();
         _scaleTimer = new System.Windows.Forms.Timer { Interval = 50 };
         _scaleTimer.Tick += (_, _) => { _scaleTimer.Stop(); ApplyLayoutScale(); };
@@ -236,8 +241,6 @@ public sealed class MainForm : Form
         Activated += Try;
     }
 
-    private const int DesignW = 592, DesignHBase = 332, DesignHTeam = 416;
-    private int _designH = DesignHBase;
     private readonly Dictionary<Control, LayoutEntry> _layout = new();
     private System.Windows.Forms.Timer? _scaleTimer;
     private float _lastFx = 1, _lastFy = 1;
@@ -282,7 +285,7 @@ public sealed class MainForm : Form
             return;
         }
         var fx = ClientSize.Width / (float)DesignW;
-        var fy = ClientSize.Height / (float)_designH;
+        var fy = ClientSize.Height / (float)DesignH;
         if (Math.Abs(fx - _lastFx) < 0.005 && Math.Abs(fy - _lastFy) < 0.005)
         {
             return;
@@ -340,79 +343,45 @@ public sealed class MainForm : Form
 
     private void Render(MonitorState s)
     {
-        var v = s.View;
-        _total.Text = v.Total;
-        _current.Text = v.Current ?? "—";
-        _current.ForeColor = v.CurrentLive ? Theme.Mint : v.Current == null ? Theme.Muted : Theme.Amber;
-        // El overlay usa textos cortos ("anterior" / "actual"); aquí hay sitio para los largos.
-        _currentCap.Text = v.CurrentCaption == OverlayModel.LastMatchCaption ? L.T("última partida", "last match")
-            : v.CurrentLive && v.Current != "…" ? L.T("partida actual", "current match")
-            : v.CurrentCaption;
-        _badge.Text = v.Badge ?? "";
-        _badgeCard.Visible = !string.IsNullOrEmpty(v.Badge);
-
-        // Línea de sesión: la primera fila del modelo (cofres y, detrás, partidas y media).
-        var session = v.Rows.FirstOrDefault();
-        var sessionChests = session != null && int.TryParse(session.Value, System.Globalization.NumberStyles.None, L.Culture, out var n)
-            ? L.Count(n, "cofre", "cofres", "chest", "chests")
-            : session?.Value;
-        _session.Text = session == null ? "" : $"{L.T("Sesión", "Session")}: {sessionChests}" + (session.Detail != null ? $"  ·  {session.Detail}" : "");
-
         var st = s.Stats;
-        _statToday.Text = L.N(st.Today);
-        // La fecha va en la línea de arriba: "1.409 · 06/11" a 15 pt no cabe en la tarjeta y se cortaba.
-        _statBestDay.Text = st.BestDay is { } bestDay ? L.N(st.BestDayChests) : "—";
-        _statBestDayCap.Text = st.BestDay is { } bd
-            ? $"{L.T("Mejor día", "Best day")} · {bd:dd/MM}"
-            : L.T("Mejor día", "Best day");
-        _statAverage.Text = st.Matches > 0 ? st.Average.ToString("0.0", L.Culture) : "—";
-        _statBestMatch.Text = st.Matches > 0 ? L.N(st.BestMatch) : "—";
-        _statMatches.Text = L.Count(st.HistoryMatches, "partida", "partidas", "match", "matches");
-        _statMatchesCap.Text = st.HistorySince is { } since
-            ? L.F("Desde {0:dd/MM/yy}", "Since {0:dd/MM/yy}", since)
-            : L.T("Histórico", "History");
-        _statTreasures.Text = $"{OverlayModel.TreasureIcon} {L.N(st.Treasures)}";
+        var live = s.Recent.FirstOrDefault()?.Live == true;
+
+        // Franja de resumen.
+        _total.Text = s.View.Total;
+        _today.Text = L.N(st.Today);
+        _todayCap.Text = live ? L.T("hoy (con la actual)", "today (incl. current)") : L.T("hoy", "today");
+        _average.Text = st.Matches > 0 ? st.Average.ToString("0.0", L.Culture) : "—";
+        _treasures.Text = $"{OverlayModel.TreasureIcon} {L.N(st.Treasures)}";
+
+        // Lista de partidas.
+        _matches.SetRows(s.Recent);
+        _matchesCount.Text = st.HistoryMatches == 0 ? ""
+            : st.HistorySince is { } since
+                ? L.F("{0} guardadas · desde {1:dd/MM/yy}", "{0} saved · since {1:dd/MM/yy}", L.N(st.HistoryMatches), since)
+                : L.F("{0} guardadas", "{0} saved", L.N(st.HistoryMatches));
+
+        _daily.SetDays(st.LastDays);
+        if (s.Team != null) RenderTeam(s.Team); else RenderRecords(st);
+
         _overlayButton.Enabled = _monitor.OverlayEnabled;
         _overlayButton.Indicator = _monitor.OverlayVisible ? Theme.Green : Theme.Red;
 
-        if (st.LastMatch is { } lm)
-        {
-            _lastValue.Text = L.Count(lm.Chests, "cofre abierto", "cofres abiertos", "chest opened", "chests opened");
-            var parts = new List<string>();
-            if (lm.Destroyed > 0) parts.Add(L.F("{0} roto(s)", "{0} destroyed", lm.Destroyed));
-            if (lm.Treasures > 0) parts.Add(L.Count(lm.Treasures, "tesoro", "tesoros", "treasure", "treasures"));
-            if (lm.Placement is { } place) parts.Add(lm.Players is { } players ? $"{L.Ordinal(place)} {L.T("de", "of")} {players}" : L.Ordinal(place));
-            if (lm.Eliminations is { } elim) parts.Add(L.F("{0} elim.", "{0} elim.", elim));
-            _lastDetail.Text = lm.PirateToken
-                ? L.T("★ Token pirata", "★ Pirate token")
-                : string.Join("  ·  ", parts);
-            _lastDetail.ForeColor = lm.PirateToken ? Theme.Amber : Theme.Muted;
-            _lastValue.ForeColor = Theme.Amber;
-        }
-        else
-        {
-            _lastValue.Text = "—";
-            _lastDetail.Text = "";
-        }
-        _daily.SetDays(st.LastDays);
+        // Token pirata / Hora del tesoro.
         var pirateAlert = s.PirateTokenLive || st.LastMatch?.PirateToken == true;
         var now = DateTime.UtcNow;
         var treasureHour = TreasureHours.Active(now);
         _pirateLabel.Text = pirateAlert
             ? (s.PirateTokenLive ? L.T("★ TOKEN PIRATA · Detectado en esta partida", "★ PIRATE TOKEN · Detected in this match")
                 : L.T("★ TOKEN PIRATA · Detectado en la partida anterior", "★ PIRATE TOKEN · Detected in the previous match"))
-                + "\n" + (s.TokenDetails ?? L.T("Ver detalles en Tesoros →", "View details in Treasures →"))
+                + "  ·  " + (s.TokenDetails ?? L.T("Ver detalles en Tesoros →", "View details in Treasures →"))
             : treasureHour != null
                 ? L.T("★ HORA DEL TESORO · Más probabilidad de tesoros", "★ TREASURE HOUR · Better treasure odds")
-                    + "\n" + L.T("Tienda pirata ×1,5 · Traje dorado ×7,5 · Vehículo ×10", "Pirate Shop ×1.5 · Gold outfit ×7.5 · Vehicle ×10")
-            : L.T("TOKEN DE TIENDA PIRATA · Sin detecciones", "PIRATE SHOP TOKEN · No detections") + "\n"
-                + (TreasureHours.Next(now) is { } next
-                    ? L.F("Próxima Hora del tesoro: {0} · Ver Tesoros →", "Next Treasure Hour: {0} · View Treasures →", TreasureHours.When(next))
-                    : L.T("Tu replay y equipo · Ver Tesoros →", "Your replay and team · View Treasures →"));
+                    + "  ·  " + L.T("Tienda pirata ×1,5 · Traje dorado ×7,5 · Vehículo ×10", "Pirate Shop ×1.5 · Gold outfit ×7.5 · Vehicle ×10")
+            : TreasureHours.Next(now) is { } next
+                ? L.F("Próxima Hora del tesoro: {0} · Ver Tesoros →", "Next Treasure Hour: {0} · View Treasures →", TreasureHours.When(next))
+                : L.T("Sin token pirata detectado · Ver Tesoros →", "No pirate token detected · View Treasures →");
         _pirateLabel.ForeColor = pirateAlert || treasureHour != null ? Theme.Amber : Theme.Muted;
         RenderTreasureHour(treasureHour);
-        SetBottomPanels(s.Team != null, true);
-        RenderTeam(s.Team);
 
         // Perfil: nombre fijo con una sola cuenta, selector con varias.
         var signature = string.Join("|", s.Profiles.Select(p => p.Key));
@@ -444,7 +413,7 @@ public sealed class MainForm : Form
         }
         _ignoreProfileChange = false;
 
-        // Aviso o actualización: uno u otro, en el mismo sitio.
+        // Aviso o actualización: uno u otro, abajo a la izquierda (los botones siguen visibles).
         _autoCloseOffer = s.AutoCloseOffer;
         _update.Visible = s.Update != null;
         if (s.Update != null)
@@ -456,14 +425,70 @@ public sealed class MainForm : Form
         _notice.Cursor = s.AutoCloseOffer ? Cursors.Hand : Cursors.Default;
         _noticeCard.Visible = s.Update == null && !string.IsNullOrEmpty(s.Notice);
 
-        // Los botones ocupan el mismo sitio que el aviso o la actualización: cuando hay aviso, se ocultan.
-        var notice = _update.Visible || _noticeCard.Visible;
-        _overlayButton.Visible = _reportButton.Visible = _settingsButton.Visible = !notice;
+        UpdateStatus();
     }
 
     /// <summary>
-    /// Hora del tesoro: título dorado con la hora de fin, borde dorado en la tarjeta principal, la del token y la ventana.
+    /// Texto de estado junto a «Actualizar»: buscando, resultado de la búsqueda pedida (unos segundos), partida en
+    /// directo o hace cuánto se comprobaron los replays por última vez. Se llama cada segundo.
     /// </summary>
+    private void UpdateStatus()
+    {
+        var s = _last;
+        var now = DateTime.UtcNow;
+        string text;
+        var color = Theme.Muted;
+        var waiting = _refreshClickedUtc is { } clicked && (s?.RefreshResult is not { } r0 || r0.AtUtc < clicked)
+            && now - clicked < TimeSpan.FromMinutes(5); // por si acaso: nunca se queda bloqueado
+        _refresh.Enabled = !waiting;
+        if (waiting)
+        {
+            text = L.T("Buscando partidas nuevas…", "Looking for new matches…");
+            color = Theme.AccentSoft;
+        }
+        else if (s?.RefreshResult is { } r && _refreshClickedUtc != null && now - r.AtUtc < TimeSpan.FromSeconds(6))
+        {
+            text = r.Added == 0
+                ? L.T("Sin partidas nuevas", "No new matches")
+                : "+" + L.Count(r.Added, "partida nueva", "partidas nuevas", "new match", "new matches");
+            color = r.Added > 0 ? Theme.Mint : Theme.Ink;
+        }
+        else if (s?.Recent.FirstOrDefault()?.Live == true)
+        {
+            text = "● " + L.T("Partida en curso", "Match in progress");
+            color = Theme.Mint;
+        }
+        else if (s?.CheckedUtc is { } checkedAt)
+        {
+            text = L.F("Actualizado {0}", "Updated {0}", Ago(now - checkedAt));
+        }
+        else
+        {
+            text = L.T("Leyendo replays…", "Reading replays…");
+        }
+        if (_status.Text != text) _status.Text = text;
+        if (_status.ForeColor != color) _status.ForeColor = color;
+
+        var tip = s?.CheckedUtc is { } c
+            ? L.F("Última comprobación de replays: {0:HH:mm:ss}", "Last replay check: {0:HH:mm:ss}", c.ToLocalTime())
+                + (s.Recent.FirstOrDefault(m => !m.Live) is { } lastMatch
+                    ? "\n" + L.F("Última partida: {0}", "Last match: {0}", L.DateTimeShort(lastMatch.Start))
+                    : "")
+                + "\n" + L.T("Se comprueba sola cada minuto y al terminar cada partida.", "Checked automatically every minute and when each match ends.")
+            : "";
+        if (_tips.GetToolTip(_status) != tip) _tips.SetToolTip(_status, tip);
+    }
+
+    /// <summary>"ahora mismo", "hace 12 s", "hace 3 min", "hace 2 h".</summary>
+    private static string Ago(TimeSpan t)
+    {
+        if (t < TimeSpan.FromSeconds(5)) return L.T("ahora mismo", "just now");
+        if (t < TimeSpan.FromMinutes(1)) return L.F("hace {0} s", "{0} s ago", (int)t.TotalSeconds);
+        if (t < TimeSpan.FromHours(1)) return L.F("hace {0} min", "{0} min ago", (int)t.TotalMinutes);
+        return L.F("hace {0} h", "{0} h ago", (int)t.TotalHours);
+    }
+
+    /// <summary>Hora del tesoro: título dorado con la cuenta atrás, borde dorado en la franja de resumen, la del token y la ventana.</summary>
     private void RenderTreasureHour(TreasureHours.Window? hour)
     {
         var on = hour != null;
@@ -471,15 +496,14 @@ public sealed class MainForm : Form
         if (_treasureShown == on) return;
         _treasureShown = on;
         _title.ForeColor = on ? Theme.Amber : Theme.Cyan;
-        _hero.EdgeColor = _pirateCard.EdgeColor = on ? Theme.Amber : null;
+        _summary.EdgeColor = _pirateCard.EdgeColor = on ? Theme.Amber : null;
         _pirateCard.BackColor = _pirateLabel.BackColor = on ? Theme.TreasurePanel : Theme.Panel;
         if (IsHandleCreated) Theme.Border(Handle, on ? Theme.Amber : null);
     }
 
     /// <summary>
     /// Título y cuenta atrás, cada segundo. Durante la hora el título dorado cuenta el tiempo que le queda. El día que hay
-    /// Hora del tesoro y aún no ha empezado, la píldora junto al título cuenta hacia ella (la tarjeta de abajo ya dice
-    /// la fecha de la próxima los demás días).
+    /// Hora del tesoro y aún no ha empezado, la píldora junto al perfil cuenta hacia ella.
     /// </summary>
     private void UpdateTreasureClock()
     {
@@ -490,81 +514,91 @@ public sealed class MainForm : Form
         {
             next = null; // no es hoy
         }
-        _title.Text = active != null
+        var title = active != null
             ? L.T("★ HORA DEL TESORO", "★ TREASURE HOUR") + " · " + L.F("quedan {0}", "{0} left", TreasureHours.Countdown(active.EndUtc - now))
             : L.T("CONTADOR DE COFRES", "CHEST COUNTER");
+        if (_title.Text != title) _title.Text = title;
         _countCard.Visible = next != null;
         if (next != null)
         {
             var text = L.F("Tesoro en {0}", "Treasure in {0}", TreasureHours.Countdown(next.StartUtc - now));
             if (_countLabel.Text != text) _countLabel.Text = text;
             var tip = L.F("Próxima Hora del tesoro: {0}", "Next Treasure Hour: {0}", TreasureHours.When(next));
-            if (_countTip.GetToolTip(_countLabel) != tip) _countTip.SetToolTip(_countLabel, tip);
+            if (_tips.GetToolTip(_countLabel) != tip) _tips.SetToolTip(_countLabel, tip);
+        }
+    }
+
+    /// <summary>Tarjeta derecha sin «Compañeros»: los récords, en filas de texto (nombre a la izquierda, cifra a la derecha).</summary>
+    private void RenderRecords(ChestStats st)
+    {
+        _sideTitle.Text = L.T("Récords", "Records");
+        _sideTitle.ForeColor = Theme.Muted;
+        var rows = new List<(string Name, string Value, Color Color)>
+        {
+            (st.BestDay is { } bd ? L.F("Mejor día ({0:dd/MM})", "Best day ({0:dd/MM})", bd) : L.T("Mejor día", "Best day"),
+                st.BestDay != null ? L.N(st.BestDayChests) : "—", Theme.Amber),
+            (L.T("Mejor partida", "Best match"), st.Matches > 0 ? L.N(st.BestMatch) : "—", Theme.Amber),
+            (L.T("Partidas jugadas", "Matches played"), L.N(st.HistoryMatches), Theme.Ink),
+        };
+        for (var i = 0; i < SideRows; i++)
+        {
+            var has = i < rows.Count;
+            _sideNames[i].Text = has ? rows[i].Name : "";
+            _sideNames[i].ForeColor = Theme.Muted;
+            _sideValues[i].Text = has ? rows[i].Value : "";
+            _sideValues[i].ForeColor = has ? rows[i].Color : Theme.Ink;
         }
     }
 
     /// <summary>
-    /// Tarjeta «Equipo»: tus cofres y los vistos de cada compañero (un mínimo: el replay solo tiene lo que pasa cerca
-    /// de ti). Sin datos de equipo (opción desactivada) la tarjeta se oculta y la ventana vuelve a su tamaño.
+    /// Tarjeta derecha con «Compañeros»: tus cofres y los vistos de cada compañero en la partida actual o la última.
+    /// Los de los compañeros son un mínimo (el replay solo tiene lo que pasa cerca de ti): se marcan con «+».
     /// </summary>
-    private void RenderTeam(TeamSummary? team)
+    private void RenderTeam(TeamSummary team)
     {
-        if (team == null)
-        {
-            return;
-        }
-        _teamTitle.Text = team.Live ? L.T("Equipo · partida actual", "Team · current match") : L.T("Equipo · última partida", "Team · last match");
-        _teamTitle.ForeColor = team.Live ? Theme.Mint : Theme.Muted;
-        _teamNames[0].Text = L.T("Tú", "You");
-        _teamValues[0].Text = L.N(team.Mine);
-
+        _sideTitle.Text = team.Live ? L.T("Equipo · partida actual", "Team · current match") : L.T("Equipo · última partida", "Team · last match");
+        _sideTitle.ForeColor = team.Live ? Theme.Mint : Theme.Muted;
         var message = team.Unknown
-            ? L.T("Partida analizada antes de guardar compañeros.", "Match analyzed before teammates were saved.")
-            : team.Mates.Count == 0 ? L.T("Partida en solitario: sin compañeros.", "Solo match: no teammates.") : null;
-        _teamMessage.Text = message ?? "";
-        _teamMessage.Visible = message != null;
-        _teamTotal.Text = team.Mates.Count == 0 ? ""
-            : team.Total > 0
-                ? L.F("Equipo ≥ {0} · compañeros ≥ {1} %", "Team ≥ {0} · teammates ≥ {1} %", L.N(team.Total), (100.0 * team.MatesTotal / team.Total).ToString("0", L.Culture))
-                : L.F("Equipo ≥ {0}", "Team ≥ {0}", L.N(team.Total));
-        for (var i = 1; i < TeamColumns; i++)
+            ? L.T("Sin datos de equipo", "No team data")
+            : team.Mates.Count == 0 ? L.T("Partida en solitario", "Solo match") : null;
+        for (var i = 0; i < SideRows; i++)
         {
-            var mate = message == null && i - 1 < team.Mates.Count ? team.Mates[i - 1] : null;
-            _teamNames[i].Text = mate?.Name ?? "";
-            _teamValues[i].Text = mate != null ? "≥ " + L.N(mate.Chests) : "";
-            _teamNames[i].Visible = _teamValues[i].Visible = message == null;
+            string name = "", value = "";
+            if (i == 0)
+            {
+                name = L.T("Tú", "You");
+                value = L.N(team.Mine);
+            }
+            else if (message != null)
+            {
+                name = i == 1 ? message : "";
+            }
+            else if (i - 1 < team.Mates.Count)
+            {
+                name = team.Mates[i - 1].Name;
+                value = L.N(team.Mates[i - 1].Chests) + "+";
+            }
+            _sideNames[i].Text = name;
+            _sideNames[i].ForeColor = i == 0 ? Theme.Ink : Theme.Muted;
+            _sideValues[i].Text = value;
+            _sideValues[i].ForeColor = i == 0 ? Theme.Amber : Theme.Ink;
         }
+        _tips.SetToolTip(_sideCard, L.T("«+»: como mínimo. Tu replay solo tiene lo que pasa cerca de ti.",
+            "“+”: at least. Your replay only has what happens near you."));
     }
 
-    /// <summary>Muestra u oculta la tarjeta «Equipo»; la ventana crece o encoge con ella, a la misma escala.</summary>
-    private void SetBottomPanels(bool team, bool pirate)
+    /// <summary>Cifra de la franja de resumen (columna <paramref name="col"/>): número arriba, texto debajo.</summary>
+    private Label SummaryFigure(int col, int colW, Color color, string caption, out Label captionLabel)
     {
-        if (_teamShown == team && _pirateShown == pirate) return;
-        var scale = ClientSize.Height / (float)_designH;
-        _teamShown = team;
-        _pirateShown = pirate;
-        _teamCard.Visible = team;
-        _pirateCard.Visible = pirate;
-        _layout[_teamCard].Location = new Point(LeftX, pirate ? 384 : 334);
-        _designH = DesignHBase + (team ? DesignHTeam - DesignHBase : 0) + (pirate ? 50 : 0);
-        _lastFx = _lastFy = -1;
-        if (WindowState == FormWindowState.Normal)
-            ClientSize = new Size(ClientSize.Width, (int)Math.Round(_designH * scale));
-        ApplyLayoutScale();
-    }
-
-    /// <summary>Tarjeta de estadística: título arriba y cifra debajo. Devuelve la etiqueta de la cifra.</summary>
-    private Label Stat(string caption, int x, int y, Color valueColor, out Label captionLabel)
-    {
-        var card = new Card { Location = new Point(x, y), Size = new Size(136, 70), Radius = 14 };
-        Controls.Add(card);
-        captionLabel = Lbl(card, caption, 8.0f, FontStyle.Regular, Theme.Muted, new Point(12, 9), new Size(113, 15));
-        return Lbl(card, "—", 15f, FontStyle.Bold, valueColor, new Point(12, 31), new Size(117, 28));
+        var x = col * colW + 16;
+        var value = Lbl(_summary, "—", 17f, FontStyle.Bold, color, new Point(x, 12), new Size(colW - 24, 32));
+        captionLabel = Lbl(_summary, caption, 8.0f, FontStyle.Regular, Theme.Muted, new Point(x + 2, 47), new Size(colW - 24, 16));
+        return value;
     }
 
     private PillButton Action(string text, int x)
     {
-        var b = new PillButton { Text = text, Location = new Point(x, 277), Size = new Size(88, 40), Radius = 11 };
+        var b = new PillButton { Text = text, Location = new Point(x, BottomY), Size = new Size(ButtonW, 38), Radius = 11 };
         Controls.Add(b);
         return b;
     }

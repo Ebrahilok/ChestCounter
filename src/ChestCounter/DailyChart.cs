@@ -81,9 +81,15 @@ public sealed class DailyChart : Control
                 g.FillRectangle(brushEmpty, cx - barWidth / 2f, baseline - 2f, barWidth, 2f);
             }
 
-            // Cifra encima de cada barra.
-            g.DrawString(L.N(d.Chests), fontValue, brushValue,
-                new RectangleF(x, baseline - h - valueH - 2f, slot, valueH), centerFar);
+            // Cifra encima de cada barra. Si no cabe (2016 en una columna estrecha), en corto: «2,0k». Nunca se parte
+            // en dos líneas: antes la segunda quedaba oculta y «2016» se leía «201».
+            var value = L.N(d.Chests);
+            if (g.MeasureString(value, fontValue).Width > slot && d.Chests >= 1000)
+            {
+                value = (d.Chests / 1000.0).ToString(d.Chests >= 10000 ? "0" : "0.0", L.Culture) + "k";
+            }
+            g.DrawString(value, fontValue, brushValue,
+                new RectangleF(x - slot, baseline - h - valueH - 2f, slot * 3, valueH), centerFar);
 
             // Día abreviado debajo (lun, mar…).
             var name = d.Day.ToString("ddd", L.Culture);
