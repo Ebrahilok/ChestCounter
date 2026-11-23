@@ -108,8 +108,11 @@ public sealed class MatchDialog : Form
         }
         else
         {
-            var teamTotal = row.Chests + d.Mates.Sum(m => m.Chests);
-            var team = Section(L.T("Compañeros", "Teammates"), L.F("equipo: {0}+ cofres", "team: {0}+ chests", L.N(teamTotal)), Theme.Cyan);
+            var teammateTotal = d.Mates.Sum(m => m.Chests);
+            var team = Section(L.T("Compañeros", "Teammates"), L.F("{0} observados", "{0} observed", L.N(teammateTotal)), Theme.Cyan);
+            Row(team, L.T("Total del escuadrón (incluyéndote)", "Squad total (including you)"),
+                L.N(row.Chests + teammateTotal) + "+", Theme.Cyan);
+            Divider(team);
             var first = true;
             foreach (var m in d.Mates)
             {
