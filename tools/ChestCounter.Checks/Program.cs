@@ -177,6 +177,13 @@ internal static class Program
             dialog.Location = new Point(-30000, -30000);
             dialog.Show();
             Check(dialog.Controls[0].Controls.Cast<Control>().All(c => c.Right <= dialog.ClientSize.Width && c.Bottom <= dialog.ClientSize.Height), "Party dialog overflows: " + name);
+            // Una sincronización rehace la ventana ya abierta: debe quedar igual (antes se perdía la escala del monitor).
+            var before = dialog.ClientSize;
+            typeof(PartyDialog).GetMethod("Rebuild", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(dialog, null);
+            Check(dialog.ClientSize == before, $"Party dialog changes size when rebuilt ({before} -> {dialog.ClientSize}, {dialog.DeviceDpi} dpi)");
+            Check(dialog.Controls[0].Width == dialog.ClientSize.Width
+                && dialog.Controls[0].Controls.Cast<Control>().All(c => c.Right <= dialog.ClientSize.Width && c.Bottom <= dialog.ClientSize.Height), "Rebuilt party dialog overflows: " + name);
+            Console.WriteLine($"party dialog {name}: {dialog.DeviceDpi} dpi, {dialog.ClientSize}");
             using var bitmap = new Bitmap(dialog.Width, dialog.Height);
             dialog.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
             bitmap.Save(Path.Combine(output, name));

@@ -18,14 +18,20 @@ public sealed class PartyDialog : Form
     private bool _busy;
     private PartyView? _view;
     private string _code = "";
+    private float _f = 1;
+
+    /// <summary>Medida de diseño (a 96 ppp) en píxeles del monitor actual.</summary>
+    private int S(float v) => (int)Math.Round(v * _f);
+    private Point P(float x, float y) => new(S(x), S(y));
+    private Size Z(float w, float h) => new(S(w), S(h));
 
     private PartyDialog(Monitor monitor, PartyView? view)
     {
         _monitor = monitor;
         _view = view;
         Text = "Party";
-        AutoScaleMode = AutoScaleMode.Dpi;
-        AutoScaleDimensions = new SizeF(96, 96);
+        // Escalado propio (no AutoScale): la ventana se rehace con cada sincronización y AutoScale solo escala la primera vez.
+        AutoScaleMode = AutoScaleMode.None;
         Font = Theme.Text();
         BackColor = Theme.Bg;
         ForeColor = Theme.Ink;
@@ -80,11 +86,13 @@ public sealed class PartyDialog : Form
             c.Dispose();
         }
         _body.Controls.Clear();
-        var y = Pad;
+        _f = DeviceDpi / 96f;
+        _body.Width = S(W);
+        var y = S(Pad);
         if (_view == null) y = BuildJoin(y, focused);
         else y = BuildParty(y, _view);
         _body.Height = y;
-        ClientSize = new Size(W, y);
+        ClientSize = new Size(S(W), y);
         ResumeLayout();
     }
 
@@ -100,38 +108,38 @@ public sealed class PartyDialog : Form
         var name = _monitor.ShownProfileName;
         if (string.IsNullOrEmpty(key) || string.IsNullOrEmpty(name))
         {
-            y = Paragraph(y + 4, L.T("Primero juega una partida con el contador abierto: hace falta saber cuál es tu cuenta de Epic.",
+            y = Paragraph(y + S(4), L.T("Primero juega una partida con el contador abierto: hace falta saber cuál es tu cuenta de Epic.",
                 "Play a match with the counter open first: it needs to know your Epic account."), Theme.Amber);
-            return Buttons(y + 8, null);
+            return Buttons(y + S(8), null);
         }
         y = Paragraph(y, L.F("Entras como {0}.", "You join as {0}.", name), Theme.Ink);
-        y += 6;
+        y += S(6);
 
         // Crear
-        var create = new Card { Location = new Point(Pad, y), Size = new Size(W - 2 * Pad, 64), Radius = 14, BackColor = Theme.Card };
-        create.Controls.Add(CardLabel(L.T("Crear una party nueva", "Create a new party"), 9.5f, FontStyle.Bold, Theme.Ink, new Point(14, 12), create));
-        create.Controls.Add(CardLabel(L.T("Te da un código para tus amigos", "Gives you a code for your friends"), 8f, FontStyle.Regular, Theme.Muted, new Point(14, 34), create));
+        var create = new Card { Location = new Point(S(Pad), y), Size = Z(W - 2 * Pad, 64), Radius = S(14), BackColor = Theme.Card };
+        create.Controls.Add(CardLabel(L.T("Crear una party nueva", "Create a new party"), 9.5f, FontStyle.Bold, Theme.Ink, P(14, 12), create));
+        create.Controls.Add(CardLabel(L.T("Te da un código para tus amigos", "Gives you a code for your friends"), 8f, FontStyle.Regular, Theme.Muted, P(14, 34), create));
         var createButton = new PillButton
         {
-            Text = L.T("Crear", "Create"), Location = new Point(create.Width - 14 - 96, 14), Size = new Size(96, 36), Radius = 11,
+            Text = L.T("Crear", "Create"), Location = new Point(create.Width - S(14 + 96), S(14)), Size = Z(96, 36), Radius = S(11),
             BackColor = Theme.Accent, HoverColor = Theme.AccentHover, ForeColor = Theme.AccentInk, Enabled = !_busy,
         };
         createButton.Click += async (_, _) => await Run(() => _monitor.Party.CreateAsync(key, name));
         create.Controls.Add(createButton);
         _body.Controls.Add(create);
-        y += create.Height + 10;
+        y += create.Height + S(10);
 
         // Unirse
-        var join = new Card { Location = new Point(Pad, y), Size = new Size(W - 2 * Pad, 64), Radius = 14, BackColor = Theme.Card };
-        join.Controls.Add(CardLabel(L.T("Unirse con un código", "Join with a code"), 9.5f, FontStyle.Bold, Theme.Ink, new Point(14, 6), join));
+        var join = new Card { Location = new Point(S(Pad), y), Size = Z(W - 2 * Pad, 64), Radius = S(14), BackColor = Theme.Card };
+        join.Controls.Add(CardLabel(L.T("Unirse con un código", "Join with a code"), 9.5f, FontStyle.Bold, Theme.Ink, P(14, 6), join));
         var box = new TextBox
         {
             Text = _code, CharacterCasing = CharacterCasing.Upper, MaxLength = 8, BorderStyle = BorderStyle.FixedSingle,
             BackColor = Theme.Panel, ForeColor = Theme.Ink, Font = Theme.Text(12f, FontStyle.Bold),
-            Location = new Point(14, 28), Size = new Size(join.Width - 14 - 96 - 12 - 14, 28), PlaceholderText = "ABC123",
+            Location = P(14, 28), Size = new Size(join.Width - S(14 + 96 + 12 + 14), S(28)), PlaceholderText = "ABC123",
         };
         box.TextChanged += (_, _) => _code = box.Text;
-        var joinButton = new PillButton { Text = L.T("Unirse", "Join"), Location = new Point(join.Width - 14 - 96, 14), Size = new Size(96, 36), Radius = 11, Enabled = !_busy };
+        var joinButton = new PillButton { Text = L.T("Unirse", "Join"), Location = new Point(join.Width - S(14 + 96), S(14)), Size = Z(96, 36), Radius = S(11), Enabled = !_busy };
         joinButton.Click += async (_, _) =>
         {
             var code = _code.Trim();
@@ -153,11 +161,11 @@ public sealed class PartyDialog : Form
         join.Controls.Add(joinButton);
         _body.Controls.Add(join);
         if (focusCode) BeginInvoke(() => { if (!box.IsDisposed) { box.Focus(); box.SelectionStart = box.TextLength; } });
-        y += join.Height + 10;
+        y += join.Height + S(10);
 
         y = Paragraph(y, L.T("Todos tenéis que usar esta versión del contador. Si un amigo juega con el contador cerrado, sus partidas se suben la próxima vez que lo abra (mientras Fortnite conserve los replays).",
             "Everyone needs this version of the counter. If a friend plays with the counter closed, their matches are uploaded the next time they open it (while Fortnite keeps the replays)."), Theme.Muted);
-        return Buttons(y + 4, null);
+        return Buttons(y + S(4), null);
     }
 
     // ---- En una party: miembros y sus cofres --------------------------------------------------------------------------
@@ -167,36 +175,36 @@ public sealed class PartyDialog : Form
         var title = new Label
         {
             Text = "Party  " + view.Code, Font = Theme.Text(14f, FontStyle.Bold), ForeColor = Theme.Cyan, BackColor = Theme.Bg,
-            Location = new Point(Pad, y), AutoSize = true, UseMnemonic = false,
+            Location = new Point(S(Pad), y), AutoSize = true, UseMnemonic = false,
         };
         _body.Controls.Add(title);
-        var copy = new PillButton { Text = L.T("Copiar código", "Copy code"), Location = new Point(W - Pad - 120, y), Size = new Size(120, 30), Radius = 10, Font = Theme.Text(8.5f, FontStyle.Bold) };
+        var copy = new PillButton { Text = L.T("Copiar código", "Copy code"), Location = new Point(S(W - Pad - 120), y), Size = Z(120, 30), Radius = S(10), Font = Theme.Text(8.5f, FontStyle.Bold) };
         copy.Click += (_, _) =>
         {
             try { Clipboard.SetText(view.Code); copy.Text = L.T("¡Copiado!", "Copied!"); }
             catch { /* portapapeles ocupado */ }
         };
         _body.Controls.Add(copy);
-        y += Math.Max(title.PreferredHeight, 30) + 4;
+        y += Math.Max(title.PreferredHeight, S(30)) + S(4);
         y = Paragraph(y, L.T("Pasa este código a tus amigos para que se unan. Los cofres de quien esté aquí salen exactos (✓) en tus partidas con ellos.",
             "Give this code to your friends so they can join. The chests of everyone here show as exact (✓) in your matches with them."), Theme.Muted);
-        y += 4;
+        y += S(4);
 
-        var card = new Card { Location = new Point(Pad, y), Width = W - 2 * Pad, Radius = 14, BackColor = Theme.Card };
+        var card = new Card { Location = new Point(S(Pad), y), Width = S(W - 2 * Pad), Radius = S(14), BackColor = Theme.Card };
         _body.Controls.Add(card);
-        var listH = Math.Min(view.Members.Count * RowH + 8, MaxListH);
-        card.Height = listH + 8;
-        var list = new Panel { Location = new Point(4, 4), Size = new Size(card.Width - 8, listH), BackColor = card.BackColor, AutoScroll = view.Members.Count * RowH + 8 > MaxListH };
+        var listH = S(Math.Min(view.Members.Count * RowH + 8, MaxListH));
+        card.Height = listH + S(8);
+        var list = new Panel { Location = P(4, 4), Size = new Size(card.Width - S(8), listH), BackColor = card.BackColor, AutoScroll = view.Members.Count * RowH + 8 > MaxListH };
         card.Controls.Add(list);
         var rowW = list.Width - (list.AutoScroll ? SystemInformation.VerticalScrollBarWidth : 0);
-        var ry = 4;
+        var ry = S(4);
         foreach (var m in view.Members)
         {
             var name = m.Name + (m.IsMe ? "  " + L.T("(tú)", "(you)") : "");
             list.Controls.Add(new Label
             {
                 Text = name, Font = Theme.Text(9.5f, FontStyle.Bold), ForeColor = m.IsMe ? Theme.Amber : Theme.Ink, BackColor = list.BackColor,
-                Location = new Point(10, ry + 4), Size = new Size(rowW - 130, 20), AutoEllipsis = true, UseMnemonic = false,
+                Location = new Point(S(10), ry + S(4)), Size = new Size(rowW - S(130), S(20)), AutoEllipsis = true, UseMnemonic = false,
             });
             var detail = L.F("{0} en total · {1}", "{0} in total · {1}", L.N(m.Total), L.Count(m.Matches, "partida", "partidas", "match", "matches"));
             if (!m.IsMe) detail += " · " + L.F("{0} contigo", "{0} with you", L.N(m.Together));
@@ -204,21 +212,21 @@ public sealed class PartyDialog : Form
             list.Controls.Add(new Label
             {
                 Text = detail, Font = Theme.Text(7.5f), ForeColor = Theme.Muted, BackColor = list.BackColor,
-                Location = new Point(10, ry + 25), Size = new Size(rowW - 20, 17), AutoEllipsis = true, UseMnemonic = false,
+                Location = new Point(S(10), ry + S(25)), Size = new Size(rowW - S(20), S(17)), AutoEllipsis = true, UseMnemonic = false,
             });
             list.Controls.Add(new Label
             {
                 Text = L.N(m.Today), Font = Theme.Text(15f, FontStyle.Bold), ForeColor = m.Today > 0 ? Theme.Cyan : Theme.Muted, BackColor = list.BackColor,
-                Location = new Point(rowW - 120, ry), Size = new Size(70, 26), TextAlign = ContentAlignment.MiddleRight, UseMnemonic = false,
+                Location = new Point(rowW - S(120), ry), Size = Z(70, 26), TextAlign = ContentAlignment.MiddleRight, UseMnemonic = false,
             });
             list.Controls.Add(new Label
             {
                 Text = L.T("hoy", "today"), Font = Theme.Text(7.5f), ForeColor = Theme.Muted, BackColor = list.BackColor,
-                Location = new Point(rowW - 48, ry + 8), Size = new Size(40, 16), UseMnemonic = false,
+                Location = new Point(rowW - S(48), ry + S(8)), Size = Z(40, 16), UseMnemonic = false,
             });
-            ry += RowH;
+            ry += S(RowH);
         }
-        y += card.Height + 8;
+        y += card.Height + S(8);
 
         var status = view.Error ?? (view.Syncing ? L.T("Sincronizando…", "Syncing…")
             : view.LastSyncUtc is { } last ? L.F("Sincronizado {0}. Se actualiza cada minuto y al terminar cada partida.", "Synced {0}. Updates every minute and after every match.", Ago(last))
@@ -227,7 +235,7 @@ public sealed class PartyDialog : Form
         y = Paragraph(y, L.T("Cofres de partidas de Battle Royale. «Contigo» = partidas tuyas en las que su número ya es exacto.",
             "Battle Royale chests. “With you” = your matches where their number is already exact."), Theme.Muted);
 
-        var leave = new PillButton { Text = L.T("Salir de la party", "Leave party"), Size = new Size(140, 36), Radius = 11, ForeColor = Theme.Coral, Enabled = !_busy };
+        var leave = new PillButton { Text = L.T("Salir de la party", "Leave party"), Size = Z(140, 36), Radius = S(11), ForeColor = Theme.Coral, Enabled = !_busy };
         leave.Click += async (_, _) =>
         {
             var sure = MessageBox.Show(this, L.T("¿Salir de la party? Tus partidas subidas se borran del servidor; los números exactos que ya tienes se quedan.",
@@ -235,7 +243,7 @@ public sealed class PartyDialog : Form
                 "Party", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
             if (sure == DialogResult.Yes) await Run(() => _monitor.Party.LeaveAsync());
         };
-        return Buttons(y + 6, leave);
+        return Buttons(y + S(6), leave);
     }
 
     // ---- Piezas ------------------------------------------------------------------------------------------------------
@@ -261,25 +269,25 @@ public sealed class PartyDialog : Form
     {
         if (_error != null)
         {
-            y = Paragraph(y, _error, Theme.Coral) + 2;
+            y = Paragraph(y, _error, Theme.Coral) + S(2);
         }
         if (_busy)
         {
-            y = Paragraph(y, L.T("Conectando con el servidor…", "Contacting the server…"), Theme.AccentSoft) + 2;
+            y = Paragraph(y, L.T("Conectando con el servidor…", "Contacting the server…"), Theme.AccentSoft) + S(2);
         }
         if (left != null)
         {
-            left.Location = new Point(Pad, y);
+            left.Location = new Point(S(Pad), y);
             _body.Controls.Add(left);
         }
         var close = new PillButton
         {
-            Text = L.T("Cerrar", "Close"), Location = new Point(W - Pad - 110, y), Size = new Size(110, 36), Radius = 11,
+            Text = L.T("Cerrar", "Close"), Location = new Point(S(W - Pad - 110), y), Size = Z(110, 36), Radius = S(11),
             BackColor = Theme.Accent, HoverColor = Theme.AccentHover, ForeColor = Theme.AccentInk, DialogResult = DialogResult.OK,
         };
         _body.Controls.Add(close);
         CancelButton = close;
-        return y + 36 + Pad;
+        return y + S(36 + Pad);
     }
 
     private int Title(int y, string text)
@@ -287,27 +295,27 @@ public sealed class PartyDialog : Form
         var title = new Label
         {
             Text = text, Font = Theme.Text(12f, FontStyle.Bold), ForeColor = Theme.Ink, BackColor = Theme.Bg,
-            Location = new Point(Pad, y), AutoSize = true, UseMnemonic = false,
+            Location = new Point(S(Pad), y), AutoSize = true, UseMnemonic = false,
         };
         _body.Controls.Add(title);
-        return y + title.PreferredHeight + 4;
+        return y + title.PreferredHeight + S(4);
     }
 
     private int Paragraph(int y, string text, Color color)
     {
         var label = new Label
         {
-            Text = text, Font = Theme.Text(8.5f), ForeColor = color, BackColor = Theme.Bg, Location = new Point(Pad, y),
-            MaximumSize = new Size(W - 2 * Pad, 0), AutoSize = true, UseMnemonic = false,
+            Text = text, Font = Theme.Text(8.5f), ForeColor = color, BackColor = Theme.Bg, Location = new Point(S(Pad), y),
+            MaximumSize = new Size(S(W - 2 * Pad), 0), AutoSize = true, UseMnemonic = false,
         };
         _body.Controls.Add(label);
-        return y + label.PreferredHeight + 6;
+        return y + label.PreferredHeight + S(6);
     }
 
-    private static Label CardLabel(string text, float size, FontStyle style, Color color, Point at, Control card) => new()
+    private Label CardLabel(string text, float size, FontStyle style, Color color, Point at, Control card) => new()
     {
         Text = text, Font = Theme.Text(size, style), ForeColor = color, BackColor = card.BackColor,
-        Location = at, Size = new Size(card.Width - 14 - 96 - 20 - at.X, (int)(size * 2.3f)), AutoEllipsis = true, UseMnemonic = false,
+        Location = at, Size = new Size(card.Width - S(14 + 96 + 20) - at.X, S(size * 2.3f)), AutoEllipsis = true, UseMnemonic = false,
     };
 
     private static string Ago(DateTime utc)
@@ -323,5 +331,13 @@ public sealed class PartyDialog : Form
     {
         base.OnHandleCreated(e);
         Theme.Chrome(Handle);
+        if (DeviceDpi / 96f != _f) Rebuild(); // se abrió en un monitor con otra escala
+    }
+
+    /// <summary>Movida a un monitor con otra escala: se rehace a la nueva medida.</summary>
+    protected override void OnDpiChanged(DpiChangedEventArgs e)
+    {
+        base.OnDpiChanged(e);
+        Rebuild();
     }
 }
