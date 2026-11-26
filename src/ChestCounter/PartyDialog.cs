@@ -19,6 +19,7 @@ public sealed class PartyDialog : Form
     private PartyView? _view;
     private string _code = "";
     private float _f = 1;
+    private int _tab; // 0 = estado de la party, 1 = partidas juntos
 
     /// <summary>Medida de diseño (a 96 ppp) en píxeles del monitor actual.</summary>
     private int S(float v) => (int)Math.Round(v * _f);
@@ -75,7 +76,8 @@ public sealed class PartyDialog : Form
 
     private static string Signature(PartyView? v) => v == null ? ""
         : string.Join("|", v.Members.Select(m => $"{m.Name},{m.Today},{m.Total},{m.Matches},{m.Together},{m.LastSync:O}"))
-            + $"|{v.Code}|{v.LastSyncUtc:O}|{v.Error}|{v.Syncing}";
+            + $"|{v.Code}|{v.LastSyncUtc:O}|{v.Error}|{v.Syncing}|"
+            + string.Join(";", v.Games.Select(g => $"{g.StartUtc:O},{string.Join(",", g.Players.Select(p => $"{p.Name}={p.Chests}{p.Exact}"))}"));
 
     private void Rebuild()
     {
@@ -185,7 +187,36 @@ public sealed class PartyDialog : Form
             catch { /* portapapeles ocupado */ }
         };
         _body.Controls.Add(copy);
-        y += Math.Max(title.PreferredHeight, S(30)) + S(4);
+        y += Math.Max(title.PreferredHeight, S(30)) + S(8);
+
+        // Pestañas: estado de la party / partidas jugadas juntos.
+        var tabs = new[] { L.T("Estado de la party", "Party status"), L.F("Partidas juntos ({0})", "Matches together ({0})", L.N(view.Games.Count)) };
+        var tabW = (W - 2 * Pad - 8) / 2f;
+        for (var i = 0; i < tabs.Length; i++)
+        {
+            var index = i;
+            var selected = _tab == i;
+            var tab = new PillButton
+            {
+                Text = tabs[i], Location = new Point(S(Pad + i * (tabW + 8)), y), Size = Z(tabW, 32), Radius = S(10),
+                Font = Theme.Text(9f, FontStyle.Bold),
+                BackColor = selected ? Theme.Accent : Theme.Panel, HoverColor = selected ? Theme.AccentHover : Theme.PanelHover,
+                ForeColor = selected ? Theme.AccentInk : Theme.Ink,
+            };
+            tab.Click += (_, _) =>
+            {
+                if (_tab == index) return;
+                _tab = index;
+                BeginInvoke(Rebuild); // el botón pulsado se rehace: después de su clic
+            };
+            _body.Controls.Add(tab);
+        }
+        y += S(32 + 12);
+        if (_tab == 1)
+        {
+            return BuildGames(y, view);
+        }
+
         y = Paragraph(y, L.T("Pasa este código a tus amigos para que se unan. Los cofres de quien esté aquí salen exactos (✓) en tus partidas con ellos.",
             "Give this code to your friends so they can join. The chests of everyone here show as exact (✓) in your matches with them."), Theme.Muted);
         y += S(4);
@@ -244,6 +275,97 @@ public sealed class PartyDialog : Form
             if (sure == DialogResult.Yes) await Run(() => _monitor.Party.LeaveAsync());
         };
         return Buttons(y + S(6), leave);
+    }
+
+    // ---- Partidas juntos: cada partida con los cofres de cada uno -----------------------------------------------------
+
+    private const int GamesShown = 60, GamesListH = 380, LineH = 19;
+
+    private int BuildGames(int y, PartyView view)
+    {
+        var games = view.Games;
+        if (games.Count == 0)
+        {
+            y = Paragraph(y, L.T("Todavía no hay partidas juntos. Aparecen aquí cuando al menos dos miembros de la party juegan la misma partida y la suben (al terminarla, con el contador abierto).",
+                "No matches together yet. They show up here when at least two party members play the same match and upload it (when it ends, with the counter open)."), Theme.Muted);
+            return Buttons(y + S(4), null);
+        }
+
+        // Resumen: cofres de cada miembro sumando todas las partidas juntos (solo los exactos).
+        var totals = games.SelectMany(g => g.Players.Where(p => p.Exact))
+            .GroupBy(p => p.Name)
+            .Select(g => (Name: g.Key, IsMe: g.First().IsMe, Chests: g.Sum(p => p.Chests), Matches: g.Count()))
+            .OrderByDescending(t => t.Chests)
+            .ToList();
+        y = Paragraph(y, L.Count(games.Count, "partida juntos", "partidas juntos", "match together", "matches together") + ":  "
+            + string.Join("  ·  ", totals.Select(t => $"{(t.IsMe ? L.T("tú", "you") : t.Name)} {L.N(t.Chests)}")), Theme.Ink);
+
+        var card = new Card { Location = new Point(S(Pad), y), Width = S(W - 2 * Pad), Radius = S(14), BackColor = Theme.Card };
+        _body.Controls.Add(card);
+        var shown = games.Take(GamesShown).ToList();
+        var contentH = shown.Sum(g => 26 + g.Players.Count * LineH + 12) + 8;
+        var listH = S(Math.Min(contentH, GamesListH));
+        card.Height = listH + S(8);
+        var list = new Panel { Location = P(4, 4), Size = new Size(card.Width - S(8), listH), BackColor = card.BackColor, AutoScroll = contentH > GamesListH };
+        card.Controls.Add(list);
+        var rowW = list.Width - (list.AutoScroll ? SystemInformation.VerticalScrollBarWidth : 0);
+        var ry = S(6);
+        var first = true;
+        foreach (var g in shown)
+        {
+            if (!first)
+            {
+                list.Controls.Add(new Panel { BackColor = Theme.CardEdge, Location = new Point(S(10), ry - S(6)), Size = new Size(rowW - S(20), 1) });
+            }
+            first = false;
+            var local = g.StartUtc == DateTime.MinValue ? (DateTime?)null : g.StartUtc.ToLocalTime();
+            var when = local is not { } at ? "—"
+                : at.Date == DateTime.Today ? L.T("Hoy", "Today") + " " + at.ToString("HH:mm", L.Culture)
+                : at.Date == DateTime.Today.AddDays(-1) ? L.T("Ayer", "Yesterday") + " " + at.ToString("HH:mm", L.Culture)
+                : at.ToString(L.En ? "MMM d · HH:mm" : "d/MM · HH:mm", L.Culture);
+            var head = when + "  ·  " + g.Mode + (g.Placement is { } place
+                ? "  ·  " + (place == 1 ? L.T("Victoria", "Victory") : "#" + L.N(place)) : "");
+            list.Controls.Add(new Label
+            {
+                Text = head, Font = Theme.Text(9f, FontStyle.Bold), ForeColor = g.Placement == 1 ? Theme.Amber : Theme.Ink, BackColor = list.BackColor,
+                Location = new Point(S(10), ry), Size = new Size(rowW - S(130), S(20)), AutoEllipsis = true, UseMnemonic = false,
+            });
+            list.Controls.Add(new Label
+            {
+                Text = L.F("equipo {0}", "team {0}", L.N(g.Total)) + (g.Exact ? "" : "+"), Font = Theme.Text(9f, FontStyle.Bold),
+                ForeColor = Theme.Cyan, BackColor = list.BackColor, TextAlign = ContentAlignment.TopRight,
+                Location = new Point(rowW - S(120), ry), Size = new Size(S(110), S(20)), UseMnemonic = false,
+            });
+            ry += S(26);
+            foreach (var p in g.Players)
+            {
+                var color = p.IsMe ? Theme.Amber : p.Exact ? Theme.Ink : Theme.Muted;
+                var name = p.IsMe ? p.Name + "  " + L.T("(tú)", "(you)")
+                    : p.InParty ? p.Name + (p.Exact ? "" : "  " + L.T("(aún no la subió)", "(not uploaded yet)"))
+                    : p.Name + "  " + L.T("(random)", "(random)");
+                list.Controls.Add(new Label
+                {
+                    Text = name, Font = Theme.Text(8.5f), ForeColor = color, BackColor = list.BackColor,
+                    Location = new Point(S(22), ry), Size = new Size(rowW - S(22 + 90 + 10), S(LineH)), AutoEllipsis = true, UseMnemonic = false,
+                });
+                // Sin AutoEllipsis: con él, «✓» no se pinta.
+                list.Controls.Add(new Label
+                {
+                    Text = p.IsMe ? L.N(p.Chests) : p.Exact ? "✓ " + L.N(p.Chests) : L.N(p.Chests) + "+",
+                    Font = Theme.Text(8.5f, FontStyle.Bold), ForeColor = p.IsMe ? Theme.Amber : p.Exact ? Theme.Mint : Theme.Muted,
+                    BackColor = list.BackColor, TextAlign = ContentAlignment.TopRight,
+                    Location = new Point(rowW - S(100), ry), Size = new Size(S(90), S(LineH)), UseMnemonic = false,
+                });
+                ry += S(LineH);
+            }
+            ry += S(12);
+        }
+        list.Controls.Add(new Panel { BackColor = list.BackColor, Location = new Point(0, ry), Size = new Size(1, 1) }); // margen final al desplazar
+        y += card.Height + S(8);
+        y = Paragraph(y, (games.Count > GamesShown ? L.F("Las {0} más recientes. ", "The {0} most recent. ", GamesShown) : "")
+            + L.T("✓ = exacto (su propio replay). «+» = mínimo visto desde tu replay: randoms o miembros que aún no la subieron.",
+                "✓ = exact (their own replay). “+” = minimum seen from your replay: randoms or members who haven't uploaded it yet."), Theme.Muted);
+        return Buttons(y + S(4), null);
     }
 
     // ---- Piezas ------------------------------------------------------------------------------------------------------

@@ -52,7 +52,24 @@ public sealed class PartyState
 public sealed record PartyMemberView(string Name, bool IsMe, DateTime? LastSync, int Today, int Total, int Matches, int Together);
 
 /// <summary>Estado de la party para la ventana (null = sin party).</summary>
-public sealed record PartyView(string Code, IReadOnlyList<PartyMemberView> Members, DateTime? LastSyncUtc, string? Error, bool Syncing);
+public sealed record PartyView(string Code, IReadOnlyList<PartyMemberView> Members, DateTime? LastSyncUtc, string? Error, bool Syncing)
+{
+    /// <summary>Partidas en las que jugaron juntos al menos dos miembros de la party, la más reciente primero.</summary>
+    public IReadOnlyList<PartyGame> Games { get; init; } = Array.Empty<PartyGame>();
+}
+
+/// <summary>
+/// Un jugador en una partida de la party. <paramref name="Exact"/>: cofres de su propio replay (miembro que la subió);
+/// si no, lo que se le vio abrir desde tu replay (un mínimo: un random, o un miembro que aún no la subió).
+/// </summary>
+public sealed record PartyGamePlayer(string Name, int Chests, bool IsMe, bool Exact, bool InParty);
+
+/// <summary>Una partida jugada juntos: cuándo, modo, puesto y los cofres de cada uno.</summary>
+public sealed record PartyGame(DateTime StartUtc, string Mode, int? Placement, IReadOnlyList<PartyGamePlayer> Players)
+{
+    public int Total => Players.Sum(p => p.Chests);
+    public bool Exact => Players.All(p => p.Exact);
+}
 
 /// <summary>
 /// Modo party: cada miembro sube a un servidor común los cofres que <b>él</b> abrió según <b>su propio</b> replay
@@ -84,6 +101,12 @@ public sealed class Party
     private volatile bool _annotate = true;
     private volatile string? _error;
     private Dictionary<string, int> _together = new();
+
+    /// <summary>
+    /// Compañeros de tus partidas sin número de la party (randoms, o miembros que aún no la subieron), por id de
+    /// sesión: así la pestaña «Partidas juntos» también los muestra, con su mínimo observado.
+    /// </summary>
+    private Dictionary<string, List<(string? MemberId, string Name, int Seen)>> _unresolved = new();
     private int _version;
 
     /// <summary>Cambia cada vez que termina una sincronización o se entra / sale: la ventana se vuelve a pintar.</summary>
@@ -316,6 +339,7 @@ public sealed class Party
             byMember = s.Matches.ToLookup(x => x.MemberId);
         }
         var together = new Dictionary<string, int>();
+        var unresolved = new Dictionary<string, List<(string?, string, int)>>();
         var changed = false;
         foreach (var m in data.Matches)
         {
@@ -325,9 +349,14 @@ public sealed class Party
                 var member = others.FirstOrDefault(o => !string.IsNullOrEmpty(t.EpicId)
                     ? string.Equals(o.EpicId, t.EpicId, StringComparison.OrdinalIgnoreCase)
                     : string.Equals(o.Name, t.Name, StringComparison.OrdinalIgnoreCase));
-                if (member == null) continue;
-                var entry = bySession.GetValueOrDefault(member.Id + "|" + m.SessionId) ?? Nearest(byMember[member.Id], m);
-                if (entry == null) continue;
+                var entry = member == null ? null
+                    : bySession.GetValueOrDefault(member.Id + "|" + m.SessionId) ?? Nearest(byMember[member.Id], m);
+                if (entry == null)
+                {
+                    if (!unresolved.TryGetValue(m.SessionId, out var list)) unresolved[m.SessionId] = list = new();
+                    list.Add((member?.Id, t.Name, t.ChestsSeen));
+                    continue;
+                }
                 together[member.Id] = together.GetValueOrDefault(member.Id) + 1;
                 if (t.VerifiedChests != entry.Chests || !SameKinds(t.VerifiedKinds, entry.Kinds))
                 {
@@ -338,6 +367,7 @@ public sealed class Party
             }
         }
         _together = together;
+        _unresolved = unresolved;
         return changed;
     }
 
@@ -375,8 +405,57 @@ public sealed class Party
             })
                 .OrderByDescending(r => r.Today).ThenByDescending(r => r.Total)
                 .ToList();
-            return new PartyView(s.Code!, rows, s.LastSyncUtc, _error, _inFlight is { IsCompleted: false });
+            return new PartyView(s.Code!, rows, s.LastSyncUtc, _error, _inFlight is { IsCompleted: false }) { Games = Games(s) };
         }
+    }
+
+    /// <summary>
+    /// Agrupa las partidas subidas por todos: misma partida = mismo id de sesión o, si no, misma hora de inicio (±90 s)
+    /// y mismo modo. Quedan las que tienen al menos dos miembros de la party (aunque hubiera randoms).
+    /// </summary>
+    private List<PartyGame> Games(PartyState s)
+    {
+        var names = s.Members.ToDictionary(m => m.Id, m => m.Name);
+        var clusters = new List<List<PartyMatch>>();
+        var bySession = new Dictionary<string, List<PartyMatch>>();
+        foreach (var e in s.Matches
+                     .Where(x => names.ContainsKey(x.MemberId) && Profiles.IsBattleRoyalePlaylist(x.Playlist))
+                     .OrderBy(x => x.StartUtc ?? DateTime.MaxValue))
+        {
+            var cluster = bySession.GetValueOrDefault(e.SessionId);
+            if (cluster == null && e.StartUtc is { } start)
+            {
+                cluster = clusters.Skip(Math.Max(0, clusters.Count - 8)).FirstOrDefault(c =>
+                    c.All(x => x.MemberId != e.MemberId) && c.Any(x => x.Playlist == e.Playlist
+                        && x.StartUtc is { } t && (t.ToUniversalTime() - start.ToUniversalTime()).Duration() <= SameMatchWindow));
+            }
+            if (cluster == null)
+            {
+                clusters.Add(cluster = new List<PartyMatch>());
+            }
+            if (cluster.Any(x => x.MemberId == e.MemberId)) continue; // la misma partida dos veces
+            cluster.Add(e);
+            bySession[e.SessionId] = cluster;
+        }
+
+        var games = new List<PartyGame>();
+        foreach (var c in clusters)
+        {
+            var players = c.Select(x => new PartyGamePlayer(names[x.MemberId], x.Chests, x.MemberId == s.MemberId, true, true)).ToList();
+            var mine = c.FirstOrDefault(x => x.MemberId == s.MemberId);
+            if (mine != null && _unresolved.TryGetValue(mine.SessionId, out var extra))
+            {
+                // Miembros que aún no la subieron (+) y randoms (+), vistos desde tu replay.
+                players.AddRange(extra.Where(x => x.MemberId == null || c.All(y => y.MemberId != x.MemberId))
+                    .Select(x => new PartyGamePlayer(x.Name, x.Seen, false, false, x.MemberId != null)));
+            }
+            if (players.Count(p => p.InParty) < 2) continue;
+            var first = mine ?? c[0];
+            games.Add(new PartyGame(first.StartUtc ?? DateTime.MinValue, Pretty.Playlist(first.Playlist),
+                c.Select(x => x.Placement).FirstOrDefault(p => p != null),
+                players.OrderByDescending(p => p.InParty).ThenByDescending(p => p.Chests).ToList()));
+        }
+        return games.OrderByDescending(g => g.StartUtc).ToList();
     }
 
     // ---- Red -----------------------------------------------------------------------------------------------------

@@ -164,17 +164,72 @@ internal static class Program
         var ownKinds = Party.OwnKinds(new MatchRecord { Chests = { new() { Kind = ChestKinds.Normal }, new() { Kind = ChestKinds.Normal } }, OtherInteractions = new() { [ChestKinds.AmmoBox] = 3 } });
         Check(ownKinds[ChestKinds.Normal] == 2 && ownKinds[ChestKinds.AmmoBox] == 3, "Uploaded kinds differ from teammate kinds");
 
+        // Partidas juntos: misma partida por id de sesión o por hora (±90 s); los randoms salen con su mínimo.
+        var partyStore = new Store(Path.Combine(output, "party-data"));
+        var t0 = new DateTime(2026, 11, 20, 20, 0, 0, DateTimeKind.Utc);
+        const string br = "Playlist_DefaultSquad";
+        partyStore.SaveParty(new PartyState
+        {
+            Server = "http://127.0.0.1:9", Code = "TEST01", MemberId = "me", Secret = "x", MyEpicId = "test",
+            Members = { new() { Id = "me", EpicId = "test", Name = "Yo" }, new() { Id = "fr", EpicId = "friend", Name = "Amigo" }, new() { Id = "o3", EpicId = "o3", Name = "Otro" } },
+            Matches =
+            {
+                new() { MemberId = "me", SessionId = "s1", StartUtc = t0, Chests = 30, Playlist = br, Placement = 2 },
+                new() { MemberId = "fr", SessionId = "s1", StartUtc = t0, Chests = 19, Playlist = br, Placement = 2 },
+                new() { MemberId = "fr", SessionId = "s2", StartUtc = t0.AddHours(1), Chests = 12, Playlist = br },
+                new() { MemberId = "me", SessionId = "s3", StartUtc = t0.AddHours(2), Chests = 25, Playlist = br },
+                new() { MemberId = "o3", SessionId = "s3-other", StartUtc = t0.AddHours(2).AddSeconds(40), Chests = 8, Playlist = br },
+            },
+        });
+        var party = new Party(partyStore);
+        var partyData = new TrackerData
+        {
+            Matches =
+            {
+                new MatchRecord { SessionId = "s1", EpicId = "test", MatchStartUtc = t0, Playlist = br,
+                    Teammates = new() { new() { Name = "Amigo", EpicId = "friend", ChestsSeen = 11 }, new() { Name = "Random", EpicId = "rnd", ChestsSeen = 4 } } },
+            },
+        };
+        typeof(Party).GetMethod("Annotate", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(party, new object[] { partyData, partyStore.LoadParty()! });
+        var partyGames = party.View()!.Games;
+        Check(partyGames.Count == 2, $"Matches together: expected 2, got {partyGames.Count}");
+        var g1 = partyGames.Single(g => g.StartUtc == t0);
+        Check(g1.Players.Count == 3 && g1.Players.Single(p => p.Name == "Amigo").Chests == 19 && g1.Players.Single(p => p.Name == "Amigo").Exact
+            && g1.Players.Single(p => p.Name == "Random") is { Exact: false, InParty: false, Chests: 4 } && g1.Total == 53 && !g1.Exact, "Match together players wrong");
+        Check(partyGames.Single(g => g.StartUtc != t0).Players.Select(p => p.Name).OrderBy(n => n).SequenceEqual(new[] { "Otro", "Yo" }), "Same match by start time not grouped");
+        Check(partyData.Matches[0].Teammates![0].VerifiedChests == 19 && partyData.Matches[0].Teammates![1].VerifiedChests == null, "Annotate wrong");
+
         var partyView = new PartyView("YP5A7X", new[]
         {
             new PartyMemberView("Ebrahilok", true, DateTime.UtcNow, 112, 4821, 179, 0),
             new PartyMemberView("TlaxcalaStudios", false, DateTime.UtcNow.AddMinutes(-3), 87, 2210, 95, 41),
             new PartyMemberView("Amigo3", false, null, 0, 0, 0, 0),
-        }, DateTime.UtcNow, null, false);
-        foreach (var (name, view) in new[] { ("party-joined.png", (PartyView?)partyView), ("party-join.png", null) })
+        }, DateTime.UtcNow, null, false)
+        {
+            Games = new[]
+            {
+                new PartyGame(DateTime.UtcNow.AddMinutes(-20), "Squads", 1, new[]
+                {
+                    new PartyGamePlayer("Ebrahilok", 31, true, true, true), new PartyGamePlayer("TlaxcalaStudios", 19, false, true, true),
+                    new PartyGamePlayer("RandomGuy", 4, false, false, false),
+                }),
+                new PartyGame(DateTime.UtcNow.AddDays(-1), "Zero Build · Duos", 7, new[]
+                {
+                    new PartyGamePlayer("Ebrahilok", 22, true, true, true), new PartyGamePlayer("Amigo3", 6, false, false, true),
+                }),
+            },
+        };
+        var gamesTab = typeof(PartyDialog).GetField("_tab", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        foreach (var (name, view, tab) in new[] { ("party-joined.png", (PartyView?)partyView, 0), ("party-games.png", partyView, 1), ("party-join.png", null, 0) })
         {
             using var dialog = (Form)Activator.CreateInstance(typeof(PartyDialog), BindingFlags.NonPublic | BindingFlags.Instance, null, new object?[] { monitor, view }, null)!;
             dialog.StartPosition = FormStartPosition.Manual;
             dialog.Location = new Point(-30000, -30000);
+            if (tab != 0)
+            {
+                gamesTab.SetValue(dialog, tab);
+                typeof(PartyDialog).GetMethod("Rebuild", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(dialog, null);
+            }
             dialog.Show();
             Check(dialog.Controls[0].Controls.Cast<Control>().All(c => c.Right <= dialog.ClientSize.Width && c.Bottom <= dialog.ClientSize.Height), "Party dialog overflows: " + name);
             // Una sincronización rehace la ventana ya abierta: debe quedar igual (antes se perdía la escala del monitor).
