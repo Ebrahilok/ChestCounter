@@ -44,7 +44,7 @@ public static class TokenOdds
 
     /// <summary>Cofres (sin cajas ni cañones) que se vio abrir a los compañeros en la partida.</summary>
     public static int TeammateChests(MatchRecord m, IReadOnlyCollection<string>? owners = null) =>
-        m.Teammates?.Where(t => owners == null || !HasToken(t, owners)).Sum(t => t.ChestsSeen) ?? 0;
+        m.Teammates?.Where(t => owners == null || !HasToken(t, owners)).Sum(t => t.Chests) ?? 0; // exactos con la party; si no, los vistos
 
     /// <summary>Clave guardada de un compañero en la lista «ya tiene el token»: su Epic id, o su nombre si no lo hay.</summary>
     public static string OwnerKey(TeammateRecord t) => !string.IsNullOrEmpty(t.EpicId) ? t.EpicId : t.Name;

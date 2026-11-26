@@ -35,6 +35,9 @@ public sealed class MainForm : Form
     private readonly Label _matchesCount;
     private readonly PillButton _filterButton;
     private readonly PillButton _statsButton;
+    private readonly PillButton _partyButton;
+    // Ventana «Party» abierta: recibe cada estado nuevo para repintarse.
+    private Action<PartyView?>? _partyUpdate;
     // Filtro de la lista (null / false = sin filtrar).
     private string? _filterMode, _filterMate;
     private bool _filterWins, _filterTop10;
@@ -69,7 +72,7 @@ public sealed class MainForm : Form
     private const int SideW = DesignW - Pad - SideX;
     private const int BodyY = 146, BodyH = 216;
     private const int PirateY = BodyY + BodyH + 8, BottomY = PirateY + 40 + 8;
-    private const int ButtonW = 84, ButtonGap = 8, Buttons = 4;
+    private const int ButtonW = 80, ButtonGap = 8, Buttons = 5;
 
     public MainForm(Monitor monitor, Store store)
     {
@@ -215,6 +218,10 @@ public sealed class MainForm : Form
         _update.Click += (_, _) => _monitor.InstallUpdate();
         Controls.Add(_update);
 
+        _partyButton = Action("Party", DesignW - Pad - 5 * ButtonW - 4 * ButtonGap);
+        _partyButton.Click += (_, _) => PartyDialog.Open(this, _monitor, _last?.Party, update => _partyUpdate = update);
+        _tips.SetToolTip(_partyButton, L.T("Juega en party con tus amigos: cada uno sube sus cofres exactos y ves cuántos abrió cada uno",
+            "Play as a party with your friends: everyone uploads their exact chests and you see how many each one opened"));
         _statsButton = Action(L.T("Estadísticas", "Stats"), DesignW - Pad - 4 * ButtonW - 3 * ButtonGap);
         _statsButton.Click += (_, _) => StatsDialog.Open(this, Filtered(_last?.Recent ?? Array.Empty<MatchRow>()), FilterText(), mate =>
         {
@@ -250,6 +257,7 @@ public sealed class MainForm : Form
         CaptureLayout();
         _scaleTimer = new System.Windows.Forms.Timer { Interval = 50 };
         _scaleTimer.Tick += (_, _) => { _scaleTimer.Stop(); ApplyLayoutScale(); };
+        DpiChanged += (_, _) => ScheduleLayoutScale();
 
         monitor.Changed += OnChanged;
         Shown += (_, _) =>
@@ -283,7 +291,7 @@ public sealed class MainForm : Form
 
     private readonly Dictionary<Control, LayoutEntry> _layout = new();
     private System.Windows.Forms.Timer? _scaleTimer;
-    private float _lastFx = 1, _lastFy = 1;
+    private (Size Size, int Dpi) _lastLayout;
 
     private sealed class LayoutEntry
     {
@@ -309,44 +317,68 @@ public sealed class MainForm : Form
     protected override void OnResize(EventArgs e)
     {
         base.OnResize(e);
-        if (WindowState == FormWindowState.Minimized)
-        {
-            return;
-        }
-        _scaleTimer?.Stop();
-        _scaleTimer?.Start();
+        ScheduleLayoutScale();
     }
 
-    /// <summary>Escala posiciones, tamaños y fuentes desde el diseño base. Las fuentes van en puntos: se dividen por el DPI para no contarlas dos veces.</summary>
+    private void ScheduleLayoutScale()
+    {
+        _scaleTimer?.Stop();
+        if (WindowState != FormWindowState.Minimized)
+            _scaleTimer?.Start();
+    }
+
     private void ApplyLayoutScale()
     {
-        if (_layout.Count == 0 || ClientSize.Width <= 0 || ClientSize.Height <= 0)
-        {
+        var size = ClientSize;
+        var dpi = DeviceDpi;
+        if (WindowState == FormWindowState.Minimized || size.Width <= 0 || size.Height <= 0
+            || _lastLayout == (size, dpi))
             return;
-        }
-        var fx = ClientSize.Width / (float)DesignW;
-        var fy = ClientSize.Height / (float)DesignH;
-        if (Math.Abs(fx - _lastFx) < 0.005 && Math.Abs(fy - _lastFy) < 0.005)
+
+        var scale = Math.Min(size.Width / (float)DesignW, size.Height / (float)DesignH);
+        var fontScale = scale * 96 / dpi;
+        var offset = new Point((int)Math.Round((size.Width - DesignW * scale) / 2),
+            (int)Math.Round((size.Height - DesignH * scale) / 2));
+
+        SuspendLayout();
+        try
         {
-            return;
-        }
-        _lastFx = fx;
-        _lastFy = fy;
-        // Durante restaurar/maximizar el tamaño puede ser transitorio: sin factor válido no se tocan las fuentes.
-        var k = Math.Min(fx / (DeviceDpi / 96f), fy / (DeviceDpi / 96f));
-        var scaleFonts = float.IsFinite(k) && k > 0.2 && k < 10;
-        foreach (var (c, l) in _layout)
-        {
-            c.Location = new Point((int)Math.Round(l.Location.X * fx), (int)Math.Round(l.Location.Y * fy));
-            c.Size = new Size((int)Math.Round(l.Size.Width * fx), (int)Math.Round(l.Size.Height * fy));
-            if (scaleFonts && l.Font != null)
+            foreach (var (control, design) in _layout)
             {
-                var nf = new Font(l.Font.FontFamily, l.Font.SizeInPoints * k, l.Font.Style);
-                l.Scaled?.Dispose();
-                l.Scaled = nf;
-                c.Font = nf;
+                var origin = control.Parent == this ? offset : Point.Empty;
+                var left = (int)Math.Round(design.Location.X * scale);
+                var top = (int)Math.Round(design.Location.Y * scale);
+                var right = (int)Math.Round((design.Location.X + design.Size.Width) * scale);
+                var bottom = (int)Math.Round((design.Location.Y + design.Size.Height) * scale);
+                control.SetBounds(origin.X + left, origin.Y + top, Math.Max(1, right - left), Math.Max(1, bottom - top));
+
+                if (design.Font == null) continue;
+                var previous = design.Scaled;
+                var next = Math.Abs(fontScale - 1) < 0.001f ? null
+                    : new Font(design.Font.FontFamily, design.Font.SizeInPoints * fontScale, design.Font.Style);
+                control.Font = next ?? design.Font;
+                design.Scaled = next;
+                previous?.Dispose();
             }
+            _lastLayout = (size, dpi);
         }
+        finally
+        {
+            ResumeLayout();
+        }
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _scaleTimer?.Dispose();
+            _monitor.Changed -= OnChanged;
+        }
+        base.Dispose(disposing);
+        if (disposing)
+            foreach (var entry in _layout.Values)
+                entry.Scaled?.Dispose();
     }
 
     protected override void OnHandleCreated(EventArgs e)
@@ -387,6 +419,9 @@ public sealed class MainForm : Form
         var live = s.Recent.FirstOrDefault()?.Live == true;
 
         CheckCelebrations(s);
+        _partyUpdate?.Invoke(s.Party);
+        _partyButton.Text = s.Party != null ? "✓ Party" : "Party";
+        _partyButton.ForeColor = s.Party != null ? Theme.Mint : Theme.Ink;
 
         // Franja de resumen: todo, o solo las partidas del filtro.
         var rows = Filtered(s.Recent);
@@ -779,16 +814,17 @@ public sealed class MainForm : Form
             }
             else if (i - 1 < team.Mates.Count)
             {
-                name = team.Mates[i - 1].Name;
-                value = L.N(team.Mates[i - 1].Chests) + "+";
+                var mate = team.Mates[i - 1];
+                name = mate.Name;
+                value = mate.Verified ? "✓ " + L.N(mate.Chests) : L.N(mate.Chests) + "+";
             }
             _sideNames[i].Text = name;
             _sideNames[i].ForeColor = i == 0 ? Theme.Ink : Theme.Muted;
             _sideValues[i].Text = value;
             _sideValues[i].ForeColor = i == 0 ? Theme.Amber : Theme.Ink;
         }
-        _tips.SetToolTip(_sideCard, L.T("«+»: como mínimo. Tu replay solo tiene lo que pasa cerca de ti.",
-            "“+”: at least. Your replay only has what happens near you."));
+        _tips.SetToolTip(_sideCard, L.T("«+»: como mínimo. Tu replay solo tiene lo que pasa cerca de ti. «✓»: exacto, lo subió tu compañero desde la party.",
+            "“+”: at least. Your replay only has what happens near you. “✓”: exact, uploaded by your teammate through the party."));
     }
 
     /// <summary>Cifra de la franja de resumen (columna <paramref name="col"/>): número arriba, texto debajo.</summary>

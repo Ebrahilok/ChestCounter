@@ -109,25 +109,40 @@ public sealed class MatchDialog : Form
         else
         {
             var teammateTotal = d.Mates.Sum(m => m.Chests);
-            var team = Section(L.T("Compañeros", "Teammates"), L.F("{0} observados", "{0} observed", L.N(teammateTotal)), Theme.Cyan);
+            var exact = d.Mates.All(m => m.Verified);
+            var anyExact = d.Mates.Any(m => m.Verified);
+            var team = Section(L.T("Compañeros", "Teammates"), exact
+                ? L.F("✓ {0} exactos", "✓ {0} exact", L.N(teammateTotal))
+                : L.F("{0} observados", "{0} observed", L.N(teammateTotal)), Theme.Cyan);
             Row(team, L.T("Total del escuadrón (incluyéndote)", "Squad total (including you)"),
-                L.N(row.Chests + teammateTotal) + "+", Theme.Cyan);
+                L.N(row.Chests + teammateTotal) + (exact ? "" : "+"), Theme.Cyan);
             Divider(team);
             var first = true;
             foreach (var m in d.Mates)
             {
                 if (!first) Divider(team);
                 first = false;
-                Row(team, m.Name, m.Chests > 0 ? L.N(m.Chests) + "+" : "0", Theme.Ink, bold: true);
+                Row(team, m.Name,
+                    m.Verified ? "✓ " + L.N(m.Chests) : m.Chests > 0 ? L.N(m.Chests) + "+" : "0",
+                    m.Verified ? Theme.Mint : Theme.Ink, bold: true);
+                if (m.Verified)
+                {
+                    Row(team, L.T("exacto: lo subió desde la party (su propio replay)", "exact: uploaded through the party (their own replay)"), "", Theme.Muted, indent: true);
+                }
                 if (m.Kinds.Count == 0)
                 {
-                    Row(team, L.T("no se le vio abrir nada", "not seen opening anything"), "", Theme.Muted, indent: true);
+                    Row(team, m.Verified ? L.T("no abrió nada", "opened nothing") : L.T("no se le vio abrir nada", "not seen opening anything"), "", Theme.Muted, indent: true);
                 }
                 foreach (var k in m.Kinds) Row(team, k.Name, L.N(k.Count), Theme.Muted, indent: true);
             }
             EndSection(team);
-            Note(L.T("«+» = al menos. Tu replay solo guarda lo que pasa cerca de ti: si un compañero abre cofres lejos, el juego no los envía a tu partida y no se pueden contar.",
-                "“+” = at least. Your replay only stores what happens near you: if a teammate opens chests far away, the game doesn't send them to you and they can't be counted."));
+            if (!exact)
+            {
+                Note(L.T("«+» = al menos. Tu replay solo guarda lo que pasa cerca de ti: si un compañero abre cofres lejos, el juego no los envía a tu partida y no se pueden contar."
+                        + (anyExact ? "" : " Con una party (botón «Party») tus amigos suben su número exacto."),
+                    "“+” = at least. Your replay only stores what happens near you: if a teammate opens chests far away, the game doesn't send them to you and they can't be counted."
+                        + (anyExact ? "" : " With a party (“Party” button) your friends upload their exact number.")));
+            }
         }
 
         // ---- Token pirata: probabilidad en esta partida ------------------------------------------------------
@@ -140,7 +155,9 @@ public sealed class MatchDialog : Form
             {
                 var all = row.OwnChestCount + row.TokenMateChests;
                 Row(tk, L.F("{0} cofres × 1 de cada {1}", "{0} chests × 1 in {1}", L.N(all), oneIn), "", Theme.Muted);
-                Row(tk, L.F("tuyos {0} + compañeros {1}+", "yours {0} + teammates {1}+", L.N(row.OwnChestCount), L.N(row.TokenMateChests)), "", Theme.Muted, indent: true);
+                Row(tk, row.TeamExact
+                    ? L.F("tuyos {0} + compañeros {1}", "yours {0} + teammates {1}", L.N(row.OwnChestCount), L.N(row.TokenMateChests))
+                    : L.F("tuyos {0} + compañeros {1}+", "yours {0} + teammates {1}+", L.N(row.OwnChestCount), L.N(row.TokenMateChests)), "", Theme.Muted, indent: true);
             }
             else
             {
@@ -293,7 +310,8 @@ public sealed class MatchDialog : Form
         s.Card.Controls.Add(new Label
         {
             Text = value, Font = Theme.Text(9f, FontStyle.Bold), ForeColor = color == Theme.Muted ? Theme.Muted : Theme.Ink,
-            BackColor = s.Card.BackColor, AutoEllipsis = true, TextAlign = ContentAlignment.TopRight,
+            // Sin AutoEllipsis: con él, «✓» (sin glifo en Segoe UI) hace que la etiqueta no pinte nada.
+            BackColor = s.Card.BackColor, TextAlign = ContentAlignment.TopRight,
             Location = new Point(s.Card.Width - CardPad - valueW, s.Y), Size = new Size(valueW, 19), UseMnemonic = false,
         });
         s.Y += 20;

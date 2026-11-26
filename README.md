@@ -41,7 +41,8 @@ Qué cambia respecto al original:
 - El gráfico de 7 días ya no corta las cifras de 4 dígitos (2016 se leía «201»).
 - **Versión en carpeta (zip)** para quien tiene Smart App Control: el exe de un solo archivo no está firmado y Smart App Control lo bloquea sin opción de abrirlo.
 - Las actualizaciones automáticas vienen de **este** repositorio, no del original.
-- Todos los textos nuevos están traducidos a los 10 idiomas de la app.
+- **Modo party**: con tus amigos en una party, sus cofres salen **exactos** (✓) en vez de «N+», porque cada uno sube los de su propio replay ([ver abajo](#modo-party-los-cofres-exactos-de-tus-amigos)).
+- Todos los textos nuevos están traducidos a los 10 idiomas de la app (salvo los del modo party, que de momento están en español e inglés).
 
 ChestCounter lee las repeticiones (replays) que Fortnite guarda de cada partida y lleva la cuenta de los cofres que abres, de los **tesoros de la caza del tesoro** y, si quieres, de los cofres de tus **compañeros de equipo**. Todo se guarda en tu PC: aunque Fortnite borre los replays, tu historial se conserva.
 
@@ -143,7 +144,20 @@ Con **Sumar tesoros del equipo** puedes incluir los premios compartidos en tus t
 - En la práctica: **si vais juntos**, el número del compañero es casi exacto; **si os separáis mucho**, se queda corto (un «0+» suele significar que estaba lejos, no que no abriera nada).
 - El contador **no aplica ningún corte de distancia**: cuenta todo lo que haya en el replay.
 
-Para tener las cifras exactas de un compañero, él tendría que usar el contador con **sus propios** replays.
+Para tener las cifras exactas de un compañero, él tendría que usar el contador con **sus propios** replays: eso es justo lo que hace el **modo party**.
+
+### Modo party: los cofres exactos de tus amigos
+
+Botón **Party** de la ventana principal. Uno **crea** la party y pasa el código de 6 letras; los demás pulsan **Unirse** y lo escriben. Desde ese momento:
+
+- Cada miembro **sube los cofres de su propio replay** (los suyos son exactos, como los tuyos) a un servidor común, al terminar cada partida y cada minuto mientras el contador está abierto. Al entrar se suben también las partidas que ya tenías.
+- En las partidas en las que jugasteis juntos, el compañero que está en la party sale con su número **exacto** y una **✓** («✓ 19») en vez de «11+». Si todo el equipo está en la party, el total del equipo también es exacto («equipo ✓ 73»). Los compañeros aleatorios siguen con su mínimo observado («4+»).
+- La partida se reconoce por su id de sesión (el mismo para todos los jugadores de esa partida) y, si no coincide, por la hora de inicio (±90 s).
+- La ventana **Party** muestra a cada miembro con sus cofres de **hoy**, en **total**, cuántas partidas subió y en cuántas tuyas su número ya es exacto.
+- Todos tenéis que usar esta versión. Si un amigo juega con el contador cerrado, sus partidas se suben la próxima vez que lo abra (mientras Fortnite conserve los replays). Hasta entonces sale «N+».
+- Se suben solo cifras: id de la partida, hora, modo, puesto y cofres por tipo, con tu nombre y tu id de Epic. **Salir de la party** borra del servidor lo que subiste; los números exactos que ya tienes se quedan en tu historial.
+
+El servidor está en [`party-server/`](party-server) (funciones de Vercel + Postgres de Neon): `https://chestcounter-party.vercel.app`.
 
 Con **Sumar sus cofres a tu total** (también desactivado), tu total, media, récords y overlay incluyen los cofres de tu equipo. Tu historial no cambia: al desactivarlo vuelves a ver solo los tuyos.
 
@@ -187,7 +201,7 @@ Fortnite puede grabar un **archivo de repetición** de cada partida en tu PC. Ch
 - ✅ **Solo lee archivos de repetición**: los `.replay` de `%LOCALAPPDATA%\FortniteGame\Saved\Demos`, en modo solo lectura.
 - ✅ **Sin modificar el juego**: no toca la carpeta de instalación de Fortnite.
 - ✅ **Sin acceso a la memoria del juego**: nunca lee, escribe ni inyecta nada en el proceso de Fortnite.
-- ✅ **No envía datos**: sin inicio de sesión, sin cuenta de Epic, sin telemetría. El único acceso a la red es buscar versiones nuevas en GitHub (se puede desactivar).
+- ✅ **No envía datos**: sin inicio de sesión, sin cuenta de Epic, sin telemetría. El acceso a la red es buscar versiones nuevas en GitHub (se puede desactivar) y, **solo si entras en una party**, subir tus cifras de cofres a su servidor.
 - ✅ **Ligero**: prioridad baja ("modo de eficiencia" en Windows 11) y duerme entre partidas.
 
 ## Tesoros

@@ -287,7 +287,9 @@ public sealed class MatchList : Control
 
             // Derecha: cofres en grande (con compañeros, debajo el total del equipo); tesoros y token pirata delante.
             var chestColor = r.Live ? Theme.Mint : r.Chests == bestChests && r.Chests > 0 ? Theme.Amber : Theme.Ink;
-            var teamText = r.TeamTotal is { } team ? L.F("equipo {0}+", "team {0}+", L.N(team)) : null;
+            var teamText = r.TeamTotal is { } team
+                ? r.TeamExact ? L.F("equipo ✓ {0}", "team ✓ {0}", L.N(team)) : L.F("equipo {0}+", "team {0}+", L.N(team))
+                : null;
             var bigRect = teamText == null
                 ? new Rectangle(chestLeft, (int)y, bigW, (int)rowH)
                 : new Rectangle(chestLeft - lineH * 2, (int)(y + rowH * 0.04f), bigW + lineH * 2, (int)(rowH * 0.62f));

@@ -1,0 +1,10 @@
+{
+  "name": "chestcounter-party",
+  "private": true,
+  "type": "module",
+  "description": "Servidor del modo party de ChestCounter: cada miembro sube los cofres exactos de su propio replay.",
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.0.0"
+  }
+}

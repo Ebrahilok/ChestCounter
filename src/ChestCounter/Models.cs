@@ -67,6 +67,27 @@ public sealed class TeammateRecord
     public int ChestsSeen { get; set; }
     /// <summary>Everything they were seen searching, by kind (chests, ammo boxes, food boxes, loot cannons).</summary>
     public Dictionary<string, int> Kinds { get; set; } = new();
+
+    /// <summary>
+    /// Cofres exactos que subió este compañero desde su propio replay (modo party), o null si no está en tu party o
+    /// todavía no subió la partida. Con valor, sustituye al mínimo observado <see cref="ChestsSeen"/>.
+    /// </summary>
+    public int? VerifiedChests { get; set; }
+
+    /// <summary>Lo que abrió, por tipo, según su propio replay (modo party). Va junto con <see cref="VerifiedChests"/>.</summary>
+    public Dictionary<string, int>? VerifiedKinds { get; set; }
+
+    /// <summary>True cuando el número es exacto (lo subió él con la party), no un mínimo.</summary>
+    [JsonIgnore]
+    public bool Verified => VerifiedChests != null;
+
+    /// <summary>Sus cofres: los exactos de la party si los hay; si no, los que se le vio abrir (un mínimo).</summary>
+    [JsonIgnore]
+    public int Chests => VerifiedChests ?? ChestsSeen;
+
+    /// <summary>Lo que abrió por tipo: el de la party si lo hay; si no, lo observado.</summary>
+    [JsonIgnore]
+    public Dictionary<string, int> ShownKinds => VerifiedKinds ?? Kinds;
 }
 
 public sealed class MatchRecord
@@ -113,7 +134,11 @@ public sealed class MatchRecord
 
     /// <summary>Chests a teammate was seen opening, plus the non-chest kinds the player chose to count.</summary>
     public static int Seen(TeammateRecord t, IReadOnlyCollection<string> kinds) =>
-        t.ChestsSeen + kinds.Sum(k => t.Kinds.GetValueOrDefault(k));
+        t.Chests + kinds.Sum(k => t.ShownKinds.GetValueOrDefault(k));
+
+    /// <summary>True when every teammate's number is exact (party), so the team total is exact too.</summary>
+    [JsonIgnore]
+    public bool TeammatesExact => Teammates is { Count: > 0 } t && t.All(x => x.Verified);
 
     /// <summary>Chests the teammates of this match were seen opening (a minimum: only what happened nearby).</summary>
     public int TeammatesSeen(IReadOnlyCollection<string> kinds) => Teammates?.Sum(t => Seen(t, kinds)) ?? 0;
@@ -449,6 +474,10 @@ public sealed class Store
             // not critical: the old files simply stay there
         }
     }
+
+    public string PartyPath => Path.Combine(Folder, "party.json");
+    public PartyState? LoadParty() => Load<PartyState>(PartyPath);
+    public void SaveParty(PartyState state) => Save(PartyPath, state);
 
     public Config? LoadConfig() => Load<Config>(ConfigPath);
     public void SaveConfig(Config config) => Save(ConfigPath, config);

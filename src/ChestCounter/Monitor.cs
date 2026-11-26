@@ -28,6 +28,9 @@ public sealed record MonitorState(OverlayView View, IReadOnlyList<Profile> Profi
     /// <summary>«Sumar sus cofres a tu total» activado: las cifras contadas incluyen a los compañeros.</summary>
     public bool CountsTeammates { get; init; }
 
+    /// <summary>Party en la que estás (miembros y sus cofres exactos), o null sin party.</summary>
+    public PartyView? Party { get; init; }
+
     /// <summary>Probabilidad de token de la partida en curso (null si no hay o no se puede leer).</summary>
     public double? TokenLive { get; init; }
 
@@ -83,6 +86,9 @@ public sealed record MatchRow(DateTime Start, string Mode, int Chests, int? Plac
 
     /// <summary>Qué se abrió y quién (para la ventana de detalle de la partida).</summary>
     public MatchDetail Detail { get; init; } = MatchDetail.Empty;
+
+    /// <summary>Todos los compañeros tienen su número exacto (party): <see cref="TeamTotal"/> no es un mínimo.</summary>
+    public bool TeamExact { get; init; }
 }
 
 /// <summary>Un recuento con nombre: «Cofre raro · 2», «Caja de munición · 5».</summary>
@@ -91,8 +97,8 @@ public sealed record NamedCount(string Name, int Count);
 /// <summary>Otro contenedor (caja de munición…) y si suma a tu total por la opción de Ajustes.</summary>
 public sealed record OtherCount(string Name, int Count, bool Counted);
 
-/// <summary>Un compañero en el detalle: cofres vistos y qué abrió, por tipo.</summary>
-public sealed record MateDetail(string Name, int Chests, IReadOnlyList<NamedCount> Kinds);
+/// <summary>Un compañero en el detalle: cofres y qué abrió, por tipo. <paramref name="Verified"/> = exacto (party), si no un mínimo.</summary>
+public sealed record MateDetail(string Name, int Chests, IReadOnlyList<NamedCount> Kinds, bool Verified = false);
 
 /// <summary>Un tesoro en el detalle: nombre, quién lo consiguió y si salió de un cofre dorado.</summary>
 public sealed record TreasureDetail(string Name, string Who, bool Golden, bool Mine);
@@ -115,8 +121,8 @@ public sealed record MatchDetail(int? DurationSeconds, IReadOnlyList<NamedCount>
     public IReadOnlyList<TreasureMoment> TreasureTimes { get; init; } = Array.Empty<TreasureMoment>();
 }
 
-/// <summary>Un compañero y los cofres que se le vieron abrir (un mínimo).</summary>
-public sealed record TeamMember(string Name, int Chests);
+/// <summary>Un compañero y sus cofres: exactos si <paramref name="Verified"/> (party), si no los que se le vieron abrir (un mínimo).</summary>
+public sealed record TeamMember(string Name, int Chests, bool Verified = false);
 
 /// <summary>
 /// Equipo de una partida para la ventana principal.
@@ -200,7 +206,13 @@ public sealed class Monitor
         _tracker = tracker;
         _dataDir = dataDir;
         _cfgGate = config;
+        Party = new Party(store);
+        Party.Changed += () => _wake.Set();
     }
+
+    /// <summary>Modo party: cofres exactos de tus compañeros (cada uno sube los de su propio replay).</summary>
+    public Party Party { get; }
+    private int _partyVersion = -1;
 
     /// <summary>Ajustes actuales (leer; los cambios se hacen con <see cref="Change"/>).</summary>
     public Config Config => _config;
@@ -385,6 +397,9 @@ public sealed class Monitor
 
     /// <summary>Nombre del perfil mostrado, o null si aún no hay partidas.</summary>
     public string? ShownProfileName => _shownName;
+
+    /// <summary>Clave del perfil mostrado (Epic id), o null si aún no hay partidas: es tu identidad en la party.</summary>
+    public string? ShownProfileKey => _shownKey;
 
     /// <summary>Cofres estimados de antes de usar el contador, del perfil mostrado.</summary>
     public int InitialChests
@@ -580,8 +595,13 @@ public sealed class Monitor
                     var liveChanged = _tracker.UpdateLive();
                     changed |= added > 0 || liveChanged;
                     _checkedUtc = DateTime.UtcNow;
+                    if (added > 0)
+                    {
+                        Party.Kick(); // sube la partida nueva y mira si tus compañeros ya subieron la suya
+                    }
                     if (manual)
                     {
+                        Party.Kick();
                         _refreshRequested = false;
                         _refreshResult = (added, DateTime.UtcNow);
                         _reportRequested = true;
@@ -602,6 +622,26 @@ public sealed class Monitor
             }
 
             changed |= CheckUpdate();
+
+            // Party: sube tus partidas y pon los cofres exactos de tus compañeros en vez del «N+».
+            try
+            {
+                if (Party.Tick(_data))
+                {
+                    _store.SaveData(_data);
+                    _reportRequested = true;
+                    changed = true;
+                }
+                if (Party.Version != _partyVersion)
+                {
+                    _partyVersion = Party.Version;
+                    changed = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                ErrorLog.Write("Party", ex);
+            }
 
             // Empieza o termina una Hora del tesoro: la ventana y el overlay cambian de color.
             var treasureHour = TreasureHours.Active(DateTime.UtcNow) != null;
@@ -732,6 +772,7 @@ public sealed class Monitor
             TokenAllTime = tokenAllTime,
             TokenOverall = tokenOverall,
             CountsTeammates = _config.CountTeammateChests,
+            Party = Party.View(),
         };
         Changed?.Invoke(state);
     }
@@ -796,7 +837,7 @@ public sealed class Monitor
             return null;
         }
         var mates = (m.Teammates ?? new List<TeammateRecord>())
-            .Select(t => new TeamMember(t.Name, MatchRecord.Seen(t, kinds)))
+            .Select(t => new TeamMember(t.Name, MatchRecord.Seen(t, kinds), t.Verified))
             .OrderByDescending(t => t.Chests)
             .ToList();
         return new TeamSummary(live != null, m.OwnChests, mates, m.Teammates == null);
@@ -848,6 +889,7 @@ public sealed class Monitor
             TokenHourChests = odds.HourChests,
             TokenMateChests = odds.MateChests,
             Detail = BuildDetail(m, kinds),
+            TeamExact = m.TeammatesExact,
         };
         var rows = new List<MatchRow>();
         if (live != null)
@@ -884,7 +926,7 @@ public sealed class Monitor
             .OrderByDescending(o => o.Counted).ThenByDescending(o => o.Count)
             .ToList();
         var mates = m.Teammates?
-            .Select(t => new MateDetail(t.Name, MatchRecord.Seen(t, countedKinds), Group(t.Kinds)))
+            .Select(t => new MateDetail(t.Name, MatchRecord.Seen(t, countedKinds), Group(t.ShownKinds), t.Verified))
             .OrderByDescending(t => t.Chests)
             .ToList();
         var treasures = m.AllTreasureFinds

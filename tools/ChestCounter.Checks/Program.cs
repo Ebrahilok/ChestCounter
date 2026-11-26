@@ -125,6 +125,86 @@ internal static class Program
             using var emptyToken = new Bitmap(main.Width, main.Height);
             main.DrawToBitmap(emptyToken, new Rectangle(Point.Empty, emptyToken.Size));
             emptyToken.Save(Path.Combine(output, "main-token-empty.png"));
+            var scaleLayout = typeof(MainForm).GetMethod("ApplyLayoutScale", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var tokenCard = oddsLabel.Parent!;
+            var originalCard = tokenCard.Bounds;
+            var originalSize = main.ClientSize;
+            foreach (var size in new[] { new Size(900, 460), new Size(480, 650), new Size(480, 345), originalSize })
+            {
+                main.ClientSize = size;
+                scaleLayout.Invoke(main, null);
+                Check(main.ClientRectangle.Contains(tokenCard.Bounds)
+                    && tokenCard.ClientRectangle.Contains(oddsLabel.Bounds)
+                    && tokenCard.ClientRectangle.Contains(totalsLabel.Bounds)
+                    && oddsLabel.Bottom <= totalsLabel.Top, "Token strip clips or overlaps when resized");
+                Check(Math.Abs(tokenCard.Width * originalCard.Height - tokenCard.Height * originalCard.Width)
+                    <= originalCard.Width + originalCard.Height, "Token strip is stretched unevenly");
+            }
+            Check(tokenCard.Bounds == originalCard, "Restoring the original window size moved the token strip");
+        }
+        // ---- Party: el número exacto que sube un compañero sustituye al mínimo observado -----------------------------
+        var exactMate = new TeammateRecord { Name = "Friend", EpicId = "friend", ChestsSeen = 4, Kinds = new() { [ChestKinds.Normal] = 4, [ChestKinds.AmmoBox] = 1 } };
+        var seenMate = new TeammateRecord { Name = "Random", ChestsSeen = 2, Kinds = new() { [ChestKinds.Normal] = 2 } };
+        var partyMatch = new MatchRecord { Playlist = "Playlist_DefaultSquad", GameVersion = "++Fortnite+Release-43.10", EpicId = "test", ChestsOpened = 3,
+            Teammates = new() { exactMate, seenMate } };
+        Check(!partyMatch.TeammatesExact && MatchRecord.Seen(exactMate, Array.Empty<string>()) == 4, "Unverified mate is not the observed minimum");
+        exactMate.VerifiedChests = 9;
+        exactMate.VerifiedKinds = new() { [ChestKinds.Normal] = 9, [ChestKinds.AmmoBox] = 6 };
+        Check(MatchRecord.Seen(exactMate, Array.Empty<string>()) == 9, "Party number not used");
+        Check(MatchRecord.Seen(exactMate, new[] { ChestKinds.AmmoBox }) == 15, "Party kinds not used for extra kinds");
+        Check(MatchRecord.Seen(seenMate, Array.Empty<string>()) == 2, "Random teammate lost its observed number");
+        Check(!partyMatch.TeammatesExact, "Team marked exact with a random teammate");
+        Check(TokenOdds.TeammateChests(partyMatch) == 11, "Token odds ignore the party number");
+        Check(Profiles.Adjust(partyMatch, new Config { CountTeammateChests = true })!.ChestsOpened == 14, "Team total ignores the party number");
+        var reloaded = JsonSerializer.Deserialize<MatchRecord>(JsonSerializer.Serialize(partyMatch))!;
+        Check(reloaded.Teammates![0].Verified && reloaded.Teammates[0].Chests == 9 && !reloaded.Teammates[1].Verified, "Party number not saved");
+        seenMate.VerifiedChests = 2;
+        seenMate.VerifiedKinds = new() { [ChestKinds.Normal] = 2 };
+        Check(partyMatch.TeammatesExact, "All-party team not exact");
+        var ownKinds = Party.OwnKinds(new MatchRecord { Chests = { new() { Kind = ChestKinds.Normal }, new() { Kind = ChestKinds.Normal } }, OtherInteractions = new() { [ChestKinds.AmmoBox] = 3 } });
+        Check(ownKinds[ChestKinds.Normal] == 2 && ownKinds[ChestKinds.AmmoBox] == 3, "Uploaded kinds differ from teammate kinds");
+
+        var partyView = new PartyView("YP5A7X", new[]
+        {
+            new PartyMemberView("Ebrahilok", true, DateTime.UtcNow, 112, 4821, 179, 0),
+            new PartyMemberView("TlaxcalaStudios", false, DateTime.UtcNow.AddMinutes(-3), 87, 2210, 95, 41),
+            new PartyMemberView("Amigo3", false, null, 0, 0, 0, 0),
+        }, DateTime.UtcNow, null, false);
+        foreach (var (name, view) in new[] { ("party-joined.png", (PartyView?)partyView), ("party-join.png", null) })
+        {
+            using var dialog = (Form)Activator.CreateInstance(typeof(PartyDialog), BindingFlags.NonPublic | BindingFlags.Instance, null, new object?[] { monitor, view }, null)!;
+            dialog.StartPosition = FormStartPosition.Manual;
+            dialog.Location = new Point(-30000, -30000);
+            dialog.Show();
+            Check(dialog.Controls[0].Controls.Cast<Control>().All(c => c.Right <= dialog.ClientSize.Width && c.Bottom <= dialog.ClientSize.Height), "Party dialog overflows: " + name);
+            using var bitmap = new Bitmap(dialog.Width, dialog.Height);
+            dialog.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
+            bitmap.Save(Path.Combine(output, name));
+        }
+        var row = new MatchRow(DateTime.Now, "Squads", 3, 4, 100, 2, 0, false, false, 14)
+        {
+            Detail = new MatchDetail(1200, new[] { new NamedCount("Chest", 3) }, 0, Array.Empty<OtherCount>(),
+                new[] { new MateDetail("Friend", 9, new[] { new NamedCount("Chest", 9) }, true), new MateDetail("Random", 2, new[] { new NamedCount("Chest", 2) }) },
+                Array.Empty<TreasureDetail>()),
+        };
+        using (var detail = (Form)Activator.CreateInstance(typeof(MatchDialog), BindingFlags.NonPublic | BindingFlags.Instance, null, new object[] { row, "report.html" }, null)!)
+        {
+            detail.StartPosition = FormStartPosition.Manual;
+            detail.Location = new Point(-30000, -30000);
+            detail.Show();
+            using var bitmap = new Bitmap(detail.Width, detail.Height);
+            detail.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
+            bitmap.Save(Path.Combine(output, "match-party.png"));
+        }
+        var allExact = row with { TeamExact = true, Detail = row.Detail with { Mates = row.Detail.Mates!.Select(m => m with { Verified = true }).ToList() } };
+        using (var detail = (Form)Activator.CreateInstance(typeof(MatchDialog), BindingFlags.NonPublic | BindingFlags.Instance, null, new object[] { allExact, "report.html" }, null)!)
+        {
+            detail.StartPosition = FormStartPosition.Manual;
+            detail.Location = new Point(-30000, -30000);
+            detail.Show();
+            using var bitmap = new Bitmap(detail.Width, detail.Height);
+            detail.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
+            bitmap.Save(Path.Combine(output, "match-party-exact.png"));
         }
         Console.WriteLine($"PASS: {_checks} regression checks; UI images and report saved in {output}");
     }

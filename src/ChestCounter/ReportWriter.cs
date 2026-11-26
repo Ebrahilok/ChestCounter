@@ -121,6 +121,10 @@ public static class ReportWriter
 
     private static string H(string? s) => WebUtility.HtmlEncode(s ?? "");
 
+    /// <summary>Compañero con número exacto (party): «✓ 23»; si no, «23+» (mínimo observado).</summary>
+    private static string Exact(TeammateRecord t) => t.Verified ? "✓ " : "";
+    private static string Plus(TeammateRecord t) => t.Verified ? "" : "+";
+
     private static DateTime When(MatchRecord m) => (m.MatchStartUtc ?? m.AnalyzedAtUtc).ToLocalTime();
 
     // Misma paleta que la ventana (azul noche, cian y ámbar). Oscuro por defecto; claro si el sistema lo pide.
@@ -693,11 +697,11 @@ public static class ReportWriter
             var barW = (100.0 * own / Math.Max(1, chestMax)).ToString("0.##", CultureInfo.InvariantCulture);
             var team = withMates && m.Teammates is { Count: > 0 } t
                 ? "<div class=\"mates-line\">" + string.Concat(t.OrderByDescending(x => MatchRecord.Seen(x, kinds))
-                    .Select(x => $"<span class=\"chip\"><span class=\"cn\">{H(x.Name)}</span> <b>{MatchRecord.Seen(x, kinds)}+</b></span>")) + "</div>"
+                    .Select(x => $"<span class=\"chip\"><span class=\"cn\">{H(x.Name)}</span> <b>{Exact(x)}{MatchRecord.Seen(x, kinds)}{Plus(x)}</b></span>")) + "</div>"
                 : "";
             var teamCell = !withMates ? ""
                 : m.Teammates is { Count: > 0 }
-                    ? $"<td class=\"r nw\"><b class=\"cy\">{N0(m.OwnChests + m.TeammatesSeen(kinds))}</b><span class=\"sm\">+</span></td>"
+                    ? $"<td class=\"r nw\"><b class=\"cy\">{N0(m.OwnChests + m.TeammatesSeen(kinds))}</b><span class=\"sm\">{(m.TeammatesExact ? "" : "+")}</span></td>"
                     : "<td class=\"r\"><span class=\"muted\">—</span></td>";
             var elims = hasElims ? $"<td class=\"r\">{(m.Eliminations is int e ? N0(e) : "<span class=\"muted\">—</span>")}</td>" : "";
             sb.Append($"<tr{(m.Placement == 1 ? " class=\"won\"" : "")}><td class=\"nw\">{L.DateTimeShort(When(m))}</td><td><span class=\"badge mode\">{H(Pretty.Playlist(m.Playlist))}</span>{team}</td><td><span class=\"badge{placeClass}\">{placeText}</span></td>{elims}<td><div class=\"chests\"><span class=\"mini\"><i style=\"width:{barW}%\"></i></span><b>{own}</b></div></td>{teamCell}<td>{treasure}</td></tr>");
@@ -826,7 +830,7 @@ public static class ReportWriter
             foreach (var m in recentTeam)
             {
                 var mates = string.Concat(m.Teammates!.OrderByDescending(t => Seen(t)).Select(t =>
-                    $"<span class=\"chip\"><span class=\"av sm-av\" style=\"background:{Tone(t.EpicId ?? t.Name)}\">{Initial(t.Name)}</span><span class=\"cn\">{H(t.Name)}</span> <b>{N(Seen(t))}+</b></span>"));
+                    $"<span class=\"chip\"><span class=\"av sm-av\" style=\"background:{Tone(t.EpicId ?? t.Name)}\">{Initial(t.Name)}</span><span class=\"cn\">{H(t.Name)}</span> <b>{Exact(t)}{N(Seen(t))}{Plus(t)}</b></span>"));
                 var total = m.OwnChests + m.TeammatesSeen(extraKinds);
                 var placeClass = m.Placement switch { 1 => " win", > 0 and <= 10 => " top", _ => "" };
                 var place = m.Placement == 1 ? "🏆 " + H(Pretty.Placement(m)) : H(Pretty.Placement(m));
@@ -834,7 +838,7 @@ public static class ReportWriter
                 var mineW = (100.0 * m.OwnChests / teamMax).ToString("0.##", CultureInfo.InvariantCulture);
                 sb.Append($"<tr><td class=\"nw\">{L.DateTimeShort(When(m))}<div class=\"sm\">{H(Pretty.Playlist(m.Playlist))}</div></td><td><span class=\"badge{placeClass}\">{place}</span></td>"
                     + $"<td class=\"r\"><b class=\"acc\">{N(m.OwnChests)}</b></td><td><div class=\"mates-line\">{mates}</div></td>"
-                    + $"<td><div class=\"teambar\"><span class=\"tb\"><i class=\"me\" style=\"width:{mineW}%\"></i><i style=\"width:{w}%\"></i></span><b class=\"cy\">{N(total)}<small>+</small></b></div></td></tr>");
+                    + $"<td><div class=\"teambar\"><span class=\"tb\"><i class=\"me\" style=\"width:{mineW}%\"></i><i style=\"width:{w}%\"></i></span><b class=\"cy\">{N(total)}<small>{(m.TeammatesExact ? "" : "+")}</small></b></div></td></tr>");
             }
             sb.Append("</tbody></table></div></section>");
         }

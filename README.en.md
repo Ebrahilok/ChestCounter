@@ -139,7 +139,20 @@ Turn it on in **Settings → Teammates in the report** (off by default). You get
 - In practice: **if you stick together**, a teammate's number is almost exact; **if you split up**, it falls short (a "0+" usually means they were far away, not that they opened nothing).
 - The counter applies **no distance cutoff**: it counts everything in the replay.
 
-To get a teammate's exact figures, they'd have to run the counter with **their own** replays.
+To get a teammate's exact figures, they'd have to run the counter with **their own** replays: that is exactly what **party mode** does.
+
+### Party mode: your friends' exact chests
+
+**Party** button in the main window. One player **creates** the party and shares the 6-letter code; the others press **Join** and type it. From then on:
+
+- Every member **uploads the chests from their own replay** (exact, like yours) to a shared server, after every match and every minute while the counter is open. Matches you already had are uploaded when you join.
+- In the matches you played together, a teammate who is in the party shows their **exact** number with a **✓** ("✓ 19") instead of "11+". If the whole team is in the party, the team total is exact too ("team ✓ 73"). Random teammates keep their observed minimum ("4+").
+- The match is recognised by its session id (the same for every player in it) and, failing that, by its start time (±90 s).
+- The **Party** window lists every member with their chests **today**, in **total**, how many matches they uploaded and in how many of yours their number is already exact.
+- Everyone needs this version. If a friend plays with the counter closed, their matches are uploaded the next time they open it (while Fortnite keeps the replays). Until then you see "N+".
+- Only figures are uploaded: match id, time, mode, placement and chests by kind, with your name and Epic id. **Leave party** deletes what you uploaded from the server; the exact numbers you already have stay in your history.
+
+The server lives in [`party-server/`](party-server) (Vercel functions + Neon Postgres): `https://chestcounter-party.vercel.app`.
 
 With **Add their chests to your total** (also off), your total, average, records and overlay include your team's chests. Your history does not change: turning it off shows only yours again.
 
@@ -183,7 +196,7 @@ Fortnite can record a **replay file** of every match on your PC. ChestCounter re
 - ✅ **Only reads replay files**: the `.replay` files in `%LOCALAPPDATA%\FortniteGame\Saved\Demos`, read-only.
 - ✅ **No game modification**: the Fortnite installation folder is never touched.
 - ✅ **No access to the game's memory**: it never reads, writes or injects anything into the Fortnite process.
-- ✅ **No data sent anywhere**: no login, no Epic account, no telemetry. The only network access is checking GitHub for new versions (can be turned off).
+- ✅ **No data sent anywhere**: no login, no Epic account, no telemetry. Network access is checking GitHub for new versions (can be turned off) and, **only if you join a party**, uploading your chest figures to its server.
 - ✅ **Lightweight**: low priority ("efficiency mode" on Windows 11) and it sleeps between matches.
 
 ## Treasures
