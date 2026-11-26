@@ -147,6 +147,7 @@ To get a teammate's exact figures, they'd have to run the counter with **their o
 
 - Every member **uploads the chests from their own replay** (exact, like yours) to a shared server, after every match and every minute while the counter is open. Matches you already had are uploaded when you join.
 - In the matches you played together, a teammate who is in the party shows their **exact** number with a **✓** ("✓ 19") instead of "11+". If the whole team is in the party, the team total is exact too ("team ✓ 73"). Random teammates keep their observed minimum ("4+").
+- **Past matches are corrected too**: your whole history is uploaded when you join, and in your old matches with a member their "N+" becomes their exact number. If someone's number changes (for example, when a match is re-analyzed), it's uploaded again and the old value is replaced by the current one. Every time you open the counter it does a **full sync** (uploads all your matches and downloads all the party's), so any mismatch fixes itself; the **⟳ Resync all** button does it too.
 - The match is recognised by its session id (the same for every player in it) and, failing that, by its start time (±90 s).
 - The **Party** window has two tabs:
   - **Party status**: every member with their chests **today**, in **total**, how many matches they uploaded, in how many of yours their number is already exact and when they last connected.

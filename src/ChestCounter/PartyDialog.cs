@@ -260,7 +260,7 @@ public sealed class PartyDialog : Form
         y += card.Height + S(8);
 
         var status = view.Error ?? (view.Syncing ? L.T("Sincronizando…", "Syncing…")
-            : view.LastSyncUtc is { } last ? L.F("Sincronizado {0}. Se actualiza cada minuto y al terminar cada partida.", "Synced {0}. Updates every minute and after every match.", Ago(last))
+            : view.LastSyncUtc is { } last ? L.F("Sincronizado {0}. Se actualiza cada minuto, al terminar cada partida y entero al abrir el contador.", "Synced {0}. Updates every minute, after every match and in full when the counter opens.", Ago(last))
             : L.T("Conectando…", "Connecting…"));
         y = Paragraph(y, status, view.Error != null ? Theme.Coral : Theme.Muted);
         y = Paragraph(y, L.T("Cofres de partidas de Battle Royale. «Contigo» = partidas tuyas en las que su número ya es exacto.",
@@ -274,7 +274,16 @@ public sealed class PartyDialog : Form
                 "Party", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
             if (sure == DialogResult.Yes) await Run(() => _monitor.Party.LeaveAsync());
         };
-        return Buttons(y + S(6), leave);
+        // Vuelve a subir todas tus partidas y a bajar todas las de la party: corrige cualquier número que no coincida.
+        var resync = new PillButton { Text = "⟳ " + L.T("Resincronizar", "Resync all"), Size = Z(130, 36), Radius = S(11), Enabled = !_busy && !view.Syncing };
+        resync.Click += (_, _) =>
+        {
+            _monitor.Party.ResyncAll();
+            _monitor.RequestPublish();
+            resync.Enabled = false;
+            resync.Text = L.T("Sincronizando…", "Syncing…");
+        };
+        return Buttons(y + S(6), leave, resync);
     }
 
     // ---- Partidas juntos: cada partida con los cofres de cada uno -----------------------------------------------------
@@ -387,7 +396,7 @@ public sealed class PartyDialog : Form
         _monitor.RequestPublish();
     }
 
-    private int Buttons(int y, PillButton? left)
+    private int Buttons(int y, PillButton? left, PillButton? middle = null)
     {
         if (_error != null)
         {
@@ -401,6 +410,11 @@ public sealed class PartyDialog : Form
         {
             left.Location = new Point(S(Pad), y);
             _body.Controls.Add(left);
+        }
+        if (middle != null)
+        {
+            middle.Location = new Point(S(W - Pad - 110 - 12 - 130), y);
+            _body.Controls.Add(middle);
         }
         var close = new PillButton
         {

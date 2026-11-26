@@ -98,6 +98,12 @@ public sealed class Party
     private Task? _inFlight;
     private DateTime _nextSync = DateTime.MinValue;
     private DateTime _nextAnnotate = DateTime.MinValue;
+
+    /// <summary>
+    /// La próxima sincronización es completa: sube todas tus partidas y descarga todas las de la party (no solo lo
+    /// cambiado), así cualquier número que no coincida con el del servidor se corrige. Se hace al abrir el contador.
+    /// </summary>
+    private volatile bool _fullSync = true;
     private volatile bool _annotate = true;
     private volatile string? _error;
     private Dictionary<string, int> _together = new();
@@ -124,6 +130,13 @@ public sealed class Party
     public bool Joined { get { lock (_gate) return _state.Joined; } }
 
     /// <summary>Pide sincronizar en el próximo ciclo (partida nueva, botón «Actualizar»).</summary>
+    /// <summary>Botón «Resincronizar todo»: vuelve a subir y bajar todas las partidas ya.</summary>
+    public void ResyncAll()
+    {
+        _fullSync = true;
+        Kick();
+    }
+
     public void Kick()
     {
         _nextSync = DateTime.MinValue;
@@ -211,14 +224,16 @@ public sealed class Party
         if ((_inFlight == null || _inFlight.IsCompleted) && DateTime.UtcNow >= _nextSync)
         {
             _nextSync = DateTime.UtcNow + Interval;
-            var uploads = OwnMatches(data, s);
-            _inFlight = Task.Run(() => SyncAsync(s, uploads));
+            var full = _fullSync;
+            _fullSync = false;
+            var uploads = OwnMatches(data, s, full);
+            _inFlight = Task.Run(() => SyncAsync(s, uploads, full));
         }
         return changed;
     }
 
     /// <summary>Tus partidas que aún no están en el servidor (o que cambiaron, por ejemplo al reanalizarlas).</summary>
-    private static List<(string Sig, UploadMatch Body)> OwnMatches(TrackerData data, PartyState s)
+    private static List<(string Sig, UploadMatch Body)> OwnMatches(TrackerData data, PartyState s, bool all = false)
     {
         var list = new List<(string, UploadMatch)>();
         foreach (var m in data.Matches)
@@ -230,7 +245,7 @@ public sealed class Party
             var kinds = OwnKinds(m);
             var start = m.MatchStartUtc is { } t ? DateTime.SpecifyKind(t, DateTimeKind.Utc) : (DateTime?)null;
             var sig = $"{m.ChestsOpened}|{start:O}|{m.Placement}|{m.Playlist}|{string.Join(",", kinds.OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => k.Key + "=" + k.Value))}";
-            if (s.Uploaded.TryGetValue(m.SessionId, out var done) && done == sig)
+            if (!all && s.Uploaded.TryGetValue(m.SessionId, out var done) && done == sig)
             {
                 continue;
             }
@@ -254,11 +269,13 @@ public sealed class Party
         return kinds;
     }
 
-    private async Task SyncAsync(PartyState s, List<(string Sig, UploadMatch Body)> uploads)
+    private async Task SyncAsync(PartyState s, List<(string Sig, UploadMatch Body)> uploads, bool full = false)
     {
         try
         {
-            var since = s.Since;
+            // Completa: sin «since», el servidor devuelve todas las partidas y se sustituye la copia local entera.
+            var since = full ? null : s.Since;
+            var replace = full;
             var chunks = uploads.Chunk(ChunkSize).ToList();
             if (chunks.Count == 0) chunks.Add(Array.Empty<(string, UploadMatch)>());
             for (var i = 0; i < chunks.Count; i++)
@@ -281,6 +298,7 @@ public sealed class Party
                         _error = L.T("Ya no estás en la party (te sacaron o se borró).", "You are no longer in the party.");
                         return;
                     }
+                    _fullSync |= full; // sin conexión: la próxima vez, completa otra vez
                     _error = error;
                     return;
                 }
@@ -292,7 +310,8 @@ public sealed class Party
                     {
                         cur.Uploaded[u.Body.SessionId] = u.Sig;
                     }
-                    var byKey = cur.Matches.ToDictionary(x => x.MemberId + "|" + x.SessionId);
+                    var byKey = replace ? new Dictionary<string, PartyMatch>() : cur.Matches.ToDictionary(x => x.MemberId + "|" + x.SessionId);
+                    replace = false;
                     foreach (var x in result.Matches)
                     {
                         byKey[x.MemberId + "|" + x.SessionId] = x;
@@ -303,7 +322,6 @@ public sealed class Party
                     cur.LastSyncUtc = DateTime.UtcNow;
                     // Solo con el último trozo: los anteriores ya trajeron todo lo cambiado hasta su hora.
                     if (i == chunks.Count - 1) cur.Since = result.ServerTime;
-                    since = cur.Since ?? since;
                     SaveState();
                 }
                 _error = null;
@@ -312,6 +330,7 @@ public sealed class Party
         }
         catch (Exception ex)
         {
+            _fullSync |= full; // no terminó: se repite completa
             _error = ex.Message;
             ErrorLog.Write("Party: sincronizar", ex);
         }

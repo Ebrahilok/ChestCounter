@@ -152,6 +152,7 @@ Botón **Party** de la ventana principal. Uno **crea** la party y pasa el códig
 
 - Cada miembro **sube los cofres de su propio replay** (los suyos son exactos, como los tuyos) a un servidor común, al terminar cada partida y cada minuto mientras el contador está abierto. Al entrar se suben también las partidas que ya tenías.
 - En las partidas en las que jugasteis juntos, el compañero que está en la party sale con su número **exacto** y una **✓** («✓ 19») en vez de «11+». Si todo el equipo está en la party, el total del equipo también es exacto («equipo ✓ 73»). Los compañeros aleatorios siguen con su mínimo observado («4+»).
+- **Las partidas pasadas también se corrigen**: al entrar se sube todo tu historial, y en tus partidas antiguas con un miembro su «N+» pasa a su número exacto. Si el número de alguien cambia (por ejemplo, al reanalizar una partida), se vuelve a subir y el dato anterior se sustituye por el actual. Cada vez que abres el contador se hace una **sincronización completa** (sube todas tus partidas y baja todas las de la party), así cualquier dato que no coincida se corrige solo; también con el botón **⟳ Resincronizar**.
 - La partida se reconoce por su id de sesión (el mismo para todos los jugadores de esa partida) y, si no coincide, por la hora de inicio (±90 s).
 - La ventana **Party** tiene dos pestañas:
   - **Estado de la party**: cada miembro con sus cofres de **hoy**, en **total**, cuántas partidas subió, en cuántas tuyas su número ya es exacto y cuándo se conectó por última vez.
