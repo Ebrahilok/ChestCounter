@@ -7,12 +7,18 @@ using System.Windows.Forms;
 namespace ChestCounter;
 
 /// <summary>Figuras redondeadas para los controles dibujados a mano.</summary>
-internal static class Shape
+public static class Shape
 {
     public static GraphicsPath Rounded(RectangleF r, float radius)
     {
         var d = Math.Min(radius * 2, Math.Min(r.Width, r.Height));
         var p = new GraphicsPath();
+        // Un arco de tamaño 0 hace que GDI+ lance «Parameter is not valid» (ventana muy estrecha, botón de 1 px…).
+        if (d < 1f || float.IsNaN(d))
+        {
+            if (r.Width > 0 && r.Height > 0) p.AddRectangle(r);
+            return p;
+        }
         p.AddArc(r.X, r.Y, d, d, 180, 90);
         p.AddArc(r.Right - d, r.Y, d, d, 270, 90);
         p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);

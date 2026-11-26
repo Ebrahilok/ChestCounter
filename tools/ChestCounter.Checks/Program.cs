@@ -56,6 +56,7 @@ internal static class Program
         Check(html.Contains("Opponent") && html.Contains("Mate") && html.Contains("Pirate Shop Access"), "Treasure report lost scopes");
         Check(html.Contains("TOKEN", StringComparison.OrdinalIgnoreCase), "Token alert missing in report");
         File.WriteAllText(Path.Combine(output, "report-test.html"), html);
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException); // un fallo al pintar rompe la prueba (en la app sale «Parameter is not valid»)
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
         var store = new Store(Path.Combine(output, "isolated-data"));
@@ -70,6 +71,13 @@ internal static class Program
             var baseSize = settings.ClientSize;
             settings.ClientSize = new Size(baseSize.Width * 3 / 2, baseSize.Height * 3 / 2);
             Check(settings.Controls.Cast<Control>().Where(c => c.Visible).All(c => c.Right <= settings.ClientSize.Width + 2 && c.Bottom <= settings.ClientSize.Height + 2), "Resized settings overflow");
+            // Estirar solo a lo ancho deja la letra igual: antes se liberaba la fuente que el control seguía usando.
+            settings.ClientSize = new Size(baseSize.Width * 2, baseSize.Height * 3 / 2);
+            settings.Refresh();
+            Application.DoEvents();
+            settings.ClientSize = new Size(baseSize.Width * 3 / 2, baseSize.Height * 3 / 2);
+            settings.Refresh();
+            Application.DoEvents();
             using var bitmap = new Bitmap(settings.Width, settings.Height);
             settings.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
             bitmap.Save(Path.Combine(output, "settings-resized.png"));
@@ -129,7 +137,10 @@ internal static class Program
             var tokenCard = oddsLabel.Parent!;
             var originalCard = tokenCard.Bounds;
             var originalSize = main.ClientSize;
-            foreach (var size in new[] { new Size(900, 460), new Size(480, 650), new Size(480, 345), originalSize })
+            var matchList = (Control)typeof(MainForm).GetField("_matches", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(main)!;
+            var baseList = matchList.Size;
+            var baseFont = matchList.Parent!.Controls[0].Font.SizeInPoints;
+            foreach (var size in new[] { new Size(900, 460), new Size(480, 650), new Size(480, 345), new Size(1400, 900), new Size(1500, 950), new Size(1500, 1000), new Size(800, 1000), new Size(820, 1000), originalSize })
             {
                 main.ClientSize = size;
                 scaleLayout.Invoke(main, null);
@@ -137,10 +148,36 @@ internal static class Program
                     && tokenCard.ClientRectangle.Contains(oddsLabel.Bounds)
                     && tokenCard.ClientRectangle.Contains(totalsLabel.Bounds)
                     && oddsLabel.Bottom <= totalsLabel.Top, "Token strip clips or overlaps when resized");
-                Check(Math.Abs(tokenCard.Width * originalCard.Height - tokenCard.Height * originalCard.Width)
-                    <= originalCard.Width + originalCard.Height, "Token strip is stretched unevenly");
+                // Nada se sale de la ventana ni de su tarjeta, y las tarjetas no se pisan.
+                var cards = main.Controls.Cast<Control>().Where(c => c.Visible && c is Card or MatchList or PillButton).ToList();
+                Check(cards.All(c => main.ClientRectangle.Contains(c.Bounds)), $"Control outside the window at {size}");
+                Check(main.Controls.Cast<Control>().OfType<Card>().Where(c => c.Visible).SelectMany(c => c.Controls.Cast<Control>().Where(x => x.Visible).Select(x => (c, x)))
+                    .All(p => p.c.ClientRectangle.Contains(p.x.Bounds)), $"Control outside its card at {size}");
+                var visibleCards = main.Controls.Cast<Control>().OfType<Card>().Where(c => c.Visible).ToList();
+                Check(!visibleCards.Any(c => visibleCards.Any(o => o != c && o.Bounds.IntersectsWith(c.Bounds))), $"Cards overlap at {size}");
+                // Fluida: con más sitio, la lista crece; la letra solo se ajusta entre el 80 y el 120 %.
+                var font = matchList.Parent!.Controls[0].Font.SizeInPoints;
+                Check((size.Width < 640 || size.Height < 460 || font >= baseFont * 0.79f) && font <= baseFont * 1.21f, $"Font scaled too much at {size}: {font}");
+                if (size.Width >= originalSize.Width && size.Height >= originalSize.Height && size != originalSize)
+                {
+                    Check(matchList.Width > baseList.Width || matchList.Height > baseList.Height, $"Match list did not grow at {size}");
+                }
+                main.Refresh(); // pinta de verdad cada control: un fallo al pintar lanza aquí
+                Application.DoEvents();
+                using var shot = new Bitmap(main.Width, main.Height);
+                main.DrawToBitmap(shot, new Rectangle(Point.Empty, shot.Size));
+                shot.Save(Path.Combine(output, $"main-{size.Width}x{size.Height}.png"));
             }
             Check(tokenCard.Bounds == originalCard, "Restoring the original window size moved the token strip");
+        }
+        // Formas redondeadas de 0 o 1 px (ventana muy estrecha): antes GDI+ lanzaba «Parameter is not valid».
+        foreach (var r in new[] { new RectangleF(0, 0, 0, 10), new RectangleF(0, 0, 0.5f, 0.5f), new RectangleF(0.5f, 0.5f, 0, 0), new RectangleF(0, 0, -3, 5), new RectangleF(0, 0, 40, 20) })
+        {
+            using var path = Shape.Rounded(r, 6);
+            using var bmp = new Bitmap(50, 30);
+            using var g = Graphics.FromImage(bmp);
+            g.FillPath(Brushes.White, path);
+            _checks++;
         }
         // ---- Party: el número exacto que sube un compañero sustituye al mínimo observado -----------------------------
         var exactMate = new TeammateRecord { Name = "Friend", EpicId = "friend", ChestsSeen = 4, Kinds = new() { [ChestKinds.Normal] = 4, [ChestKinds.AmmoBox] = 1 } };

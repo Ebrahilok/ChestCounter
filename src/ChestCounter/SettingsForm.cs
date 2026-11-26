@@ -364,10 +364,13 @@ public sealed class SettingsForm : Form
                 (int)Math.Round(bounds.Width * fx), (int)Math.Round(bounds.Height * fy));
             var scaled = new Font(font.FontFamily, font.SizeInPoints * k, font.Style);
             control.Font = scaled;
-            _resizeFonts.Add(scaled);
+            // Con una fuente igual, Windows Forms conserva la anterior: se guarda la que usa de verdad.
+            if (!ReferenceEquals(control.Font, scaled)) scaled.Dispose();
+            if (!ReferenceEquals(control.Font, font) && !_resizeFonts.Contains(control.Font)) _resizeFonts.Add(control.Font);
         }
         ResumeLayout();
-        foreach (var font in oldFonts) font.Dispose();
+        // Solo se liberan las que ya no usa ningún control (antes se liberaban también las que seguían en uso).
+        foreach (var old in oldFonts.Where(o => !_resizeFonts.Contains(o))) old.Dispose();
     }
     protected override void Dispose(bool disposing)
     {

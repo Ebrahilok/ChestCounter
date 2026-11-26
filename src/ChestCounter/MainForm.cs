@@ -57,6 +57,12 @@ public sealed class MainForm : Form
     private readonly PillButton _update;
     private readonly PillButton _overlayButton, _reportButton, _settingsButton;
     private readonly Card _pirateCard;
+    // Disposición fluida: controles que se recolocan al cambiar el tamaño de la ventana.
+    private readonly Label _thanks;
+    private readonly Card _listCard, _dailyCard;
+    private readonly Label _listTitle, _dailyTitle;
+    private readonly Label[] _sumCaps = new Label[4];
+    private readonly Panel[] _sumSeps = new Panel[3];
     private readonly Label _pirateLabel;
     private readonly Label _pirateTotals;
     private MonitorState? _last;
@@ -86,7 +92,7 @@ public sealed class MainForm : Form
         BackColor = Theme.Bg;
         ForeColor = Theme.Ink;
         FormBorderStyle = FormBorderStyle.Sizable;
-        MinimumSize = new Size(480, 345);
+        MinimumSize = new Size(DesignW * 4 / 5, DesignH * 4 / 5);
         StartPosition = FormStartPosition.CenterScreen;
         ClientSize = new Size(DesignW, DesignH);
         Icon = AppIcon.Load();
@@ -135,7 +141,7 @@ public sealed class MainForm : Form
         Controls.Add(_refresh);
 
         // Corazón: vuelve a abrir el mensaje de agradecimiento (por si se cerró sin leerlo).
-        var thanks = new Label
+        var thanks = _thanks = new Label
         {
             Text = "♥", Location = new Point(DesignW - 22, 0), Size = new Size(22, 22), Font = Theme.Text(10f, FontStyle.Bold),
             ForeColor = Theme.Rose, BackColor = Theme.Bg, TextAlign = ContentAlignment.MiddleCenter, Cursor = Cursors.Hand,
@@ -154,18 +160,20 @@ public sealed class MainForm : Form
         _total = Lbl(_summary, "0", 22f, FontStyle.Bold, Theme.Cyan, new Point(14, 4), new Size(colW - 18, 42));
         _totalCap = Lbl(_summary, L.T("cofres en total", "chests in total"), 8.0f, FontStyle.Regular, Theme.Muted, new Point(17, 47), new Size(colW - 20, 16));
         _today = SummaryFigure(1, colW, Theme.Ink, L.T("hoy", "today"), out _todayCap);
+        _sumCaps[0] = _totalCap;
+        _sumCaps[1] = _todayCap;
         _goalBar = new GoalBar { Location = new Point(colW + 18, 64), Size = new Size(colW - 34, 5), Visible = false };
         _summary.Controls.Add(_goalBar);
-        _average = SummaryFigure(2, colW, Theme.Ink, L.T("media por partida", "average per match"), out _);
-        _treasures = SummaryFigure(3, colW, Theme.Rose, L.T("tesoros", "treasures"), out _);
+        _average = SummaryFigure(2, colW, Theme.Ink, L.T("media por partida", "average per match"), out _sumCaps[2]);
+        _treasures = SummaryFigure(3, colW, Theme.Rose, L.T("tesoros", "treasures"), out _sumCaps[3]);
         for (var i = 1; i < 4; i++)
         {
-            _summary.Controls.Add(new Panel { BackColor = Theme.CardEdge, Location = new Point(i * colW, 16), Size = new Size(1, 42) });
+            _summary.Controls.Add(_sumSeps[i - 1] = new Panel { BackColor = Theme.CardEdge, Location = new Point(i * colW, 16), Size = new Size(1, 42) });
         }
 
         // ---- Lista de partidas (lo principal) --------------------------------------------------------------
-        var list = new Card { Location = new Point(Pad, BodyY), Size = new Size(ListW, BodyH), Radius = 14 };
-        Lbl(list, L.T("Partidas", "Matches"), 9f, FontStyle.Bold, Theme.Ink, new Point(14, 9), new Size(80, 18));
+        var list = _listCard = new Card { Location = new Point(Pad, BodyY), Size = new Size(ListW, BodyH), Radius = 14 };
+        _listTitle = Lbl(list, L.T("Partidas", "Matches"), 9f, FontStyle.Bold, Theme.Ink, new Point(14, 9), new Size(80, 18));
         _matchesCount = Lbl(list, "", 8.0f, FontStyle.Regular, Theme.Muted, new Point(94, 10), new Size(ListW - 14 - 118 - 8 - 94, 16), ContentAlignment.TopRight);
         _filterButton = new PillButton { Text = L.T("Filtrar ▾", "Filter ▾"), Location = new Point(ListW - 14 - 118, 6), Size = new Size(118, 24), Radius = 9, Font = Theme.Text(8f, FontStyle.Bold) };
         _filterButton.Click += (_, _) => ShowFilterMenu();
@@ -176,8 +184,8 @@ public sealed class MainForm : Form
         Controls.Add(list);
 
         // ---- Columna derecha: últimos 7 días y récords / equipo -----------------------------------------------
-        var daily = new Card { Location = new Point(SideX, BodyY), Size = new Size(SideW, 112), Radius = 14 };
-        Lbl(daily, L.T("Últimos 7 días", "Last 7 days"), 8.0f, FontStyle.Regular, Theme.Muted, new Point(13, 7), new Size(SideW - 26, 14));
+        var daily = _dailyCard = new Card { Location = new Point(SideX, BodyY), Size = new Size(SideW, 112), Radius = 14 };
+        _dailyTitle = Lbl(daily, L.T("Últimos 7 días", "Last 7 days"), 8.0f, FontStyle.Regular, Theme.Muted, new Point(13, 7), new Size(SideW - 26, 14));
         _daily = new DailyChart { Location = new Point(8, 24), Size = new Size(SideW - 16, 84), BackColor = Theme.Card, Font = Theme.Text(7f) };
         daily.Controls.Add(_daily);
         Controls.Add(daily);
@@ -257,7 +265,7 @@ public sealed class MainForm : Form
         CaptureLayout();
         _scaleTimer = new System.Windows.Forms.Timer { Interval = 50 };
         _scaleTimer.Tick += (_, _) => { _scaleTimer.Stop(); ApplyLayoutScale(); };
-        DpiChanged += (_, _) => ScheduleLayoutScale();
+        DpiChanged += (_, _) => { ApplyMinimumSize(); ScheduleLayoutScale(); };
 
         monitor.Changed += OnChanged;
         Shown += (_, _) =>
@@ -292,6 +300,7 @@ public sealed class MainForm : Form
     private readonly Dictionary<Control, LayoutEntry> _layout = new();
     private System.Windows.Forms.Timer? _scaleTimer;
     private (Size Size, int Dpi) _lastLayout;
+    private float _fontZoom = 1f;
 
     private sealed class LayoutEntry
     {
@@ -327,6 +336,11 @@ public sealed class MainForm : Form
             _scaleTimer?.Start();
     }
 
+    /// <summary>
+    /// Disposición fluida: la letra solo se ajusta un poco (80–120 % según el tamaño) y el espacio que sobra se reparte.
+    /// La lista de partidas se queda con lo que crece (más filas a la vista), la columna derecha se ensancha con
+    /// moderación, el gráfico gana altura y la franja del token y los botones quedan abajo. Medidas de diseño a 96 ppp.
+    /// </summary>
     private void ApplyLayoutScale()
     {
         var size = ClientSize;
@@ -335,30 +349,109 @@ public sealed class MainForm : Form
             || _lastLayout == (size, dpi))
             return;
 
-        var scale = Math.Min(size.Width / (float)DesignW, size.Height / (float)DesignH);
-        var fontScale = scale * 96 / dpi;
-        var offset = new Point((int)Math.Round((size.Width - DesignW * scale) / 2),
-            (int)Math.Round((size.Height - DesignH * scale) / 2));
+        var d = dpi / 96f;
+        var fit = Math.Min(size.Width / (DesignW * d), size.Height / (DesignH * d));
+        var zoom = fit < 0.8f ? fit : Math.Min(fit, 1.2f); // más pequeña que el mínimo: lo justo para que quepa todo
+        var z = d * zoom;
+        float w = size.Width / z, h = size.Height / z; // tamaño de la ventana en unidades de diseño
+
+        void Put(Control c, float x, float y, float cw, float ch)
+        {
+            var left = (int)Math.Round(x * z);
+            var top = (int)Math.Round(y * z);
+            c.SetBounds(left, top, Math.Max(1, (int)Math.Round((x + cw) * z) - left), Math.Max(1, (int)Math.Round((y + ch) * z) - top));
+        }
 
         SuspendLayout();
         try
         {
-            foreach (var (control, design) in _layout)
+            // Letra: la de diseño × zoom (en puntos: el DPI ya lo aplica Windows). Solo si el zoom cambia.
+            if (Math.Abs(zoom - _fontZoom) > 0.001f)
             {
-                var origin = control.Parent == this ? offset : Point.Empty;
-                var left = (int)Math.Round(design.Location.X * scale);
-                var top = (int)Math.Round(design.Location.Y * scale);
-                var right = (int)Math.Round((design.Location.X + design.Size.Width) * scale);
-                var bottom = (int)Math.Round((design.Location.Y + design.Size.Height) * scale);
-                control.SetBounds(origin.X + left, origin.Y + top, Math.Max(1, right - left), Math.Max(1, bottom - top));
+                foreach (var (control, design) in _layout)
+                {
+                    if (design.Font == null) continue;
+                    var previous = design.Scaled;
+                    var next = Math.Abs(zoom - 1) < 0.001f ? null
+                        : new Font(design.Font.FontFamily, design.Font.SizeInPoints * zoom, design.Font.Style);
+                    control.Font = next ?? design.Font;
+                    // Con una fuente igual (mismo tamaño), Windows Forms se queda con la que ya tenía: esa no se libera.
+                    // Antes se liberaba igualmente y el control pintaba con una fuente liberada («Parameter is not valid»).
+                    var actual = control.Font;
+                    if (next != null && !ReferenceEquals(next, actual)) next.Dispose();
+                    if (previous != null && !ReferenceEquals(previous, actual)) previous.Dispose();
+                    design.Scaled = ReferenceEquals(actual, design.Font) ? null : actual;
+                }
+                _fontZoom = zoom;
+            }
 
-                if (design.Font == null) continue;
-                var previous = design.Scaled;
-                var next = Math.Abs(fontScale - 1) < 0.001f ? null
-                    : new Font(design.Font.FontFamily, design.Font.SizeInPoints * fontScale, design.Font.Style);
-                control.Font = next ?? design.Font;
-                design.Scaled = next;
-                previous?.Dispose();
+            // Cabecera: título y perfil a la izquierda; estado, «Actualizar» y corazón a la derecha.
+            Put(_title, Pad, 12, 300, 18);
+            Put(_profileName, Pad, 33, 210, 18);
+            Put(_profile, Pad, 31, 200, 24);
+            Put(_countCard, 230, 31, 128, 22);
+            Put(_countLabel, 0, 0, 128, 22);
+            Put(_refresh, w - Pad - 98, 14, 90, 34);
+            Put(_status, Math.Max(364, w - Pad - 98 - 6 - 200), 14, Math.Min(200, w - Pad - 98 - 6 - 364), 34);
+            Put(_thanks, w - 22, 0, 22, 22);
+
+            // Resumen: cuatro columnas que se reparten el ancho.
+            var sumW = w - 2 * Pad;
+            var colW = sumW / 4;
+            Put(_summary, Pad, 62, sumW, 74);
+            Put(_total, 14, 4, colW - 18, 42);
+            Put(_sumCaps[0], 17, 47, colW - 20, 16);
+            var figures = new[] { _today, _average, _treasures };
+            for (var i = 1; i < 4; i++)
+            {
+                Put(figures[i - 1], i * colW + 16, 12, colW - 24, 32);
+                Put(_sumCaps[i], i * colW + 18, 47, colW - 24, 16);
+                Put(_sumSeps[i - 1], i * colW, 16, 1, 42);
+            }
+            Put(_goalBar, colW + 18, 64, colW - 34, 5);
+
+            // Abajo: botones a la derecha (más anchos si hay sitio), el aviso con lo que queda; encima, la franja del token.
+            var bottomY = h - 42;
+            var pirateY = bottomY - 48;
+            var buttonW = Math.Clamp((w - 2 * Pad - 160 - Buttons * ButtonGap) / Buttons, ButtonW, 104);
+            var buttons = new[] { _partyButton, _statsButton, _overlayButton, _reportButton, _settingsButton };
+            for (var i = 0; i < buttons.Length; i++)
+            {
+                Put(buttons[i], w - Pad - (Buttons - i) * buttonW - (Buttons - 1 - i) * ButtonGap, bottomY, buttonW, 38);
+            }
+            var noticeW = w - 2 * Pad - Buttons * buttonW - Buttons * ButtonGap;
+            Put(_noticeCard, Pad, bottomY, noticeW, 38);
+            Put(_notice, 12, 0, noticeW - 24, 38);
+            Put(_update, Pad, bottomY, noticeW, 38);
+            Put(_pirateCard, Pad, pirateY, sumW, 40);
+            Put(_pirateLabel, 13, 0, sumW - 26, 20);
+            Put(_pirateTotals, 13, 20, sumW - 26, 20);
+
+            // Centro: la lista se queda con el espacio que sobra; la columna derecha crece poco.
+            var bodyH = pirateY - 8 - BodyY;
+            var sideW = Math.Clamp(w * 0.34f, SideW, 320);
+            var listW = w - 2 * Pad - Gap - sideW;
+            var sideX = Pad + listW + Gap;
+            Put(_listCard, Pad, BodyY, listW, bodyH);
+            Put(_listTitle, 14, 9, 80, 18);
+            Put(_filterButton, listW - 14 - 118, 6, 118, 24);
+            Put(_matchesCount, 94, 10, listW - 14 - 118 - 8 - 94, 16);
+            Put(_matches, 4, 32, listW - 8, bodyH - 38);
+
+            var dailyH = Math.Clamp(bodyH * 0.52f, 112, 240);
+            Put(_dailyCard, sideX, BodyY, sideW, dailyH);
+            Put(_dailyTitle, 13, 7, sideW - 26, 14);
+            Put(_daily, 8, 24, sideW - 16, dailyH - 28);
+
+            var sideH = bodyH - dailyH - 8;
+            Put(_sideCard, sideX, BodyY + dailyH + 8, sideW, sideH);
+            Put(_sideTitle, 13, 7, sideW - 26, 14);
+            var step = Math.Clamp((sideH - 32) / SideRows, 16, 26);
+            for (var i = 0; i < SideRows; i++)
+            {
+                var y = 26 + i * step;
+                Put(_sideNames[i], 13, y, sideW - 26 - 64, 16);
+                Put(_sideValues[i], sideW - 13 - 64, y, 64, 16);
             }
             _lastLayout = (size, dpi);
         }
@@ -366,6 +459,14 @@ public sealed class MainForm : Form
         {
             ResumeLayout();
         }
+        Invalidate(true);
+    }
+
+    /// <summary>Tamaño mínimo: el 80 % del diseño a la escala del monitor (más pequeño, la letra ya no cabe).</summary>
+    private void ApplyMinimumSize()
+    {
+        var d = DeviceDpi / 96f;
+        MinimumSize = SizeFromClientSize(new Size((int)Math.Ceiling(DesignW * 0.8f * d), (int)Math.Ceiling(DesignH * 0.8f * d)));
     }
 
     protected override void Dispose(bool disposing)
@@ -385,6 +486,7 @@ public sealed class MainForm : Form
     {
         base.OnHandleCreated(e);
         Theme.Chrome(Handle); // esquinas redondeadas de Windows 11 (el sistema las dibuja sin tocar botones ni bordes)
+        ApplyMinimumSize();
         _treasureShown = null; // ventana nueva: vuelve a aplicar el borde
         if (_last != null)
         {
