@@ -17,7 +17,12 @@
 ---
 
 > [!NOTE]
-> **This is a fork.** The original project is [**xdoofy92/ChestCounter**](https://github.com/xdoofy92/ChestCounter), by **Doofy**: replay parsing, the overlay, treasures and almost everything else is their work. This fork, by [**Ebrahilok**](https://github.com/Ebrahilok), mainly changes **the interface**.
+> **This is a fork.** The original project is [**xdoofy92/ChestCounter**](https://github.com/xdoofy92/ChestCounter), by **Doofy**: replay parsing, the overlay and treasures are their work. This fork, by [**Ebrahilok**](https://github.com/Ebrahilok), started as an interface redesign and now adds a lot more:
+>
+> - **Party mode**: your friends upload the chests from their own replay, so in your matches together they show as **exact (✓)** instead of "N+", with a **matches together** tab and a **party website** (everyone's profile, their matches and **which settings they have on**). Own server on Vercel.
+> - **Pirate token odds** per match, per day and overall, including your team's chests and a list of who already has it.
+> - **New interface**: match list at the center, match details inside the app, timeline, stats, filters, daily goal and a window that adapts to its size.
+> - **Reliability**: daily history backup, match in progress shown, folder build for **Smart App Control** and updates from this repository.
 
 ## Why this fork
 
@@ -156,7 +161,9 @@ To get a teammate's exact figures, they'd have to run the counter with **their o
 <p align="center"><img src="docs/party-status.png" alt="Party: status" width="49%">&nbsp;<img src="docs/party-matches.png" alt="Party: matches together" width="49%"></p>
 
 - Everyone needs **version 2.2.0 or later**. If a friend plays with the counter closed, their matches are uploaded the next time they open it (while Fortnite keeps the replays). Until then you see "N+".
-- Only figures are uploaded: match id, time, mode, placement and chests by kind, with your name and Epic id. **Leave party** deletes what you uploaded from the server; the exact numbers you already have stay in your history.
+- Only figures are uploaded: match id, time, mode, placement and chests by kind, with your name and Epic id, plus **which counting settings you have on** and the app version. **Leave party** deletes what you uploaded from the server; the exact numbers you already have stay in your history.
+
+**Party website.** In the Party window, **↗ Open the party on the web** opens a private page for your party (only reachable with that link, which the app gives to its members): each member's profile with total chests, today, average, records, a 14-day chart and their matches; the **matches together**; and **which settings everyone has on** (whether they add ammo boxes, food boxes, loot cannons or their teammates' chests, the count-from date…). That explains why two people see different totals: each profile shows **chests only** (comparable across everyone) and **as seen in their app**. In your own app, a party friend's number is already counted with **your** settings.
 
 The server lives in [`party-server/`](party-server) (Vercel functions + Neon Postgres): `https://chestcounter-party.vercel.app`.
 

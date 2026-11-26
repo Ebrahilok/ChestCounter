@@ -1,4 +1,4 @@
-import { route, member, partyView, HttpError } from '../lib/db.js';
+import { route, member, partyView, HttpError, cleanSettings } from '../lib/db.js';
 
 const MaxUpload = 1000;
 
@@ -49,7 +49,16 @@ export default route(async (body, sql) => {
       WHERE (matches.chests, matches.kinds, matches.start_utc, matches.playlist, matches.placement)
         IS DISTINCT FROM (EXCLUDED.chests, EXCLUDED.kinds, EXCLUDED.start_utc, EXCLUDED.playlist, EXCLUDED.placement)`;
   }
-  await sql`UPDATE members SET last_sync = now() WHERE id = ${me.id}`;
+  // Ajustes de su app (qué suma a su total) y versión: se ven en la web de la party.
+  const settings = cleanSettings(body.settings);
+  const appVersion = typeof body.appVersion === 'string' ? body.appVersion.slice(0, 20) : null;
+  if (settings || appVersion) {
+    await sql`UPDATE members SET last_sync = now(),
+      settings = COALESCE(${settings ? JSON.stringify(settings) : null}::jsonb, settings),
+      app_version = COALESCE(${appVersion}, app_version) WHERE id = ${me.id}`;
+  } else {
+    await sql`UPDATE members SET last_sync = now() WHERE id = ${me.id}`;
+  }
 
   const since = body.since ? new Date(body.since) : null;
   const sinceIso = since && !Number.isNaN(since.getTime()) ? since.toISOString() : '1970-01-01T00:00:00Z';

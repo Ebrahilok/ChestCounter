@@ -17,7 +17,12 @@
 ---
 
 > [!NOTE]
-> **Esto es un fork.** El proyecto original es [**xdoofy92/ChestCounter**](https://github.com/xdoofy92/ChestCounter), creado por **Doofy**: el análisis de los replays, el overlay, los tesoros y casi todo lo demás es trabajo suyo. Este fork, de [**Ebrahilok**](https://github.com/Ebrahilok), cambia sobre todo **la interfaz**.
+> **Esto es un fork.** El proyecto original es [**xdoofy92/ChestCounter**](https://github.com/xdoofy92/ChestCounter), creado por **Doofy**: el análisis de los replays, el overlay y los tesoros son trabajo suyo. Este fork, de [**Ebrahilok**](https://github.com/Ebrahilok), empezó rediseñando la interfaz y hoy añade bastante más:
+>
+> - **Modo party**: tus amigos suben los cofres de su propio replay y en vuestras partidas salen **exactos (✓)** en vez de «N+», con una pestaña de **partidas juntos** y una **web de la party** (perfil de cada uno, sus partidas y **qué ajustes tiene activados**). Servidor propio en Vercel.
+> - **Probabilidad del token pirata** por partida, por día y en total, con los cofres de tu equipo y la lista de quién ya lo tiene.
+> - **Interfaz nueva**: lista de partidas en el centro, detalle de cada partida dentro de la app, línea de tiempo, estadísticas, filtros, meta diaria y una ventana que se adapta al tamaño.
+> - **Fiabilidad**: copia de seguridad diaria del historial, partida en curso visible, versión en carpeta para **Smart App Control** y actualizaciones desde este repositorio.
 
 ## Por qué este fork
 
@@ -161,7 +166,9 @@ Botón **Party** de la ventana principal. Uno **crea** la party y pasa el códig
 <p align="center"><img src="docs/party-estado.png" alt="Party: estado" width="49%">&nbsp;<img src="docs/party-partidas.png" alt="Party: partidas juntos" width="49%"></p>
 
 - Todos tenéis que usar la **versión 2.2.0 o posterior**. Si un amigo juega con el contador cerrado, sus partidas se suben la próxima vez que lo abra (mientras Fortnite conserve los replays). Hasta entonces sale «N+».
-- Se suben solo cifras: id de la partida, hora, modo, puesto y cofres por tipo, con tu nombre y tu id de Epic. **Salir de la party** borra del servidor lo que subiste; los números exactos que ya tienes se quedan en tu historial.
+- Se suben solo cifras: id de la partida, hora, modo, puesto y cofres por tipo, con tu nombre y tu id de Epic, más **qué ajustes de conteo tienes activados** y la versión de la app. **Salir de la party** borra del servidor lo que subiste; los números exactos que ya tienes se quedan en tu historial.
+
+**Web de la party.** En la ventana Party, **↗ Ver la party en la web** abre una página privada de vuestra party (solo se entra con ese enlace, que la app da a sus miembros): el perfil de cada uno con sus cofres totales, de hoy, media, récords, gráfico de los últimos 14 días y sus partidas; las **partidas juntos**; y **los ajustes que tiene activados cada uno** (si suma cajas de munición, comida, cañones o los cofres de sus compañeros, desde qué fecha cuenta…). Así se entiende por qué dos personas ven totales distintos: en la web cada perfil sale de dos formas, **solo cofres** (comparable entre todos) y **como lo ve en su app**. En tu propia app, el número de un amigo de la party ya se cuenta con **tus** ajustes.
 
 El servidor está en [`party-server/`](party-server) (funciones de Vercel + Postgres de Neon): `https://chestcounter-party.vercel.app`.
 

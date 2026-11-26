@@ -1,4 +1,4 @@
-import { route, text, newCode, newId, newSecret, hash, partyView } from '../lib/db.js';
+import { route, text, newCode, newId, newSecret, newViewToken, hash, partyView } from '../lib/db.js';
 
 /** Crea una party y su primer miembro. */
 export default route(async (body, sql) => {
@@ -6,7 +6,7 @@ export default route(async (body, sql) => {
   const name = text(body.name, 'name', 40);
   for (let i = 0; i < 5; i++) {
     const code = newCode();
-    const created = await sql`INSERT INTO parties (code) VALUES (${code}) ON CONFLICT DO NOTHING RETURNING code`;
+    const created = await sql`INSERT INTO parties (code, view_token) VALUES (${code}, ${newViewToken()}) ON CONFLICT DO NOTHING RETURNING code`;
     if (created.length === 0) continue;
     const id = newId(), secret = newSecret();
     await sql`INSERT INTO members (id, party_code, epic_id, name, secret_hash)

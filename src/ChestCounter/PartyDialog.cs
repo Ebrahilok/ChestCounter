@@ -76,7 +76,7 @@ public sealed class PartyDialog : Form
 
     private static string Signature(PartyView? v) => v == null ? ""
         : string.Join("|", v.Members.Select(m => $"{m.Name},{m.Today},{m.Total},{m.Matches},{m.Together},{m.LastSync:O}"))
-            + $"|{v.Code}|{v.LastSyncUtc:O}|{v.Error}|{v.Syncing}|"
+            + $"|{v.Code}|{v.WebUrl}|{v.LastSyncUtc:O}|{v.Error}|{v.Syncing}|"
             + string.Join(";", v.Games.Select(g => $"{g.StartUtc:O},{string.Join(",", g.Players.Select(p => $"{p.Name}={p.Chests}{p.Exact}"))}"));
 
     private void Rebuild()
@@ -220,6 +220,23 @@ public sealed class PartyDialog : Form
         y = Paragraph(y, L.T("Pasa este código a tus amigos para que se unan. Los cofres de quien esté aquí salen exactos (✓) en tus partidas con ellos.",
             "Give this code to your friends so they can join. The chests of everyone here show as exact (✓) in your matches with them."), Theme.Muted);
         y += S(4);
+        if (view.WebUrl is { } url)
+        {
+            // Web de la party: perfil de cada uno, partidas juntos y qué tiene activado cada uno en su app.
+            var web = new PillButton
+            {
+                Text = "↗  " + L.T("Ver la party en la web: perfiles y ajustes de cada uno", "Open the party on the web: profiles and everyone's settings"),
+                Location = new Point(S(Pad), y), Size = Z(W - 2 * Pad, 34), Radius = S(11), Font = Theme.Text(9f, FontStyle.Bold),
+                ForeColor = Theme.Cyan,
+            };
+            web.Click += (_, _) =>
+            {
+                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true })?.Dispose(); }
+                catch { /* sin navegador */ }
+            };
+            _body.Controls.Add(web);
+            y += S(34 + 12);
+        }
 
         var card = new Card { Location = new Point(S(Pad), y), Width = S(W - 2 * Pad), Radius = S(14), BackColor = Theme.Card };
         _body.Controls.Add(card);

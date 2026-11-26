@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Party · Contador de cofres</title>
+<style>
+  :root {
+    --bg: #0b0e14; --card: #151a24; --edge: #262e3d; --panel: #1c2330; --line: #343d50;
+    --ink: #e6eaf2; --muted: #7a8496; --cyan: #38d6f0; --amber: #ffb84d; --mint: #3ddc97; --rose: #ff80aa; --coral: #ff6363;
+    --bar: #38d6f0;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 "Segoe UI", system-ui, sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 20px 60px; }
+  header { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 18px; }
+  header .brand { color: var(--cyan); font-weight: 700; letter-spacing: .06em; font-size: 13px; }
+  header h1 { margin: 0; font-size: 26px; }
+  header h1 span { color: var(--cyan); }
+  header .meta { color: var(--muted); font-size: 13px; margin-left: auto; }
+  button, .tab { font: inherit; color: var(--ink); background: var(--panel); border: 0; border-radius: 10px; padding: 8px 14px; cursor: pointer; font-weight: 600; }
+  button:hover, .tab:hover { background: #262f40; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
+  .tab.on { background: var(--cyan); color: #08161e; }
+  .card { background: var(--card); border: 1px solid var(--edge); border-radius: 14px; padding: 16px 18px; }
+  .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); }
+  .grid > *, .stats > * { min-width: 0; }
+  .member { cursor: pointer; transition: border-color .15s; }
+  .member:hover { border-color: var(--cyan); }
+  .member .top { display: flex; align-items: baseline; gap: 10px; }
+  .member .name { font-weight: 700; font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .member .today { margin-left: auto; font-size: 30px; font-weight: 700; color: var(--cyan); }
+  .member .today small { font-size: 12px; color: var(--muted); font-weight: 400; margin-left: 4px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .chip { font-size: 12px; padding: 3px 9px; border-radius: 999px; background: var(--panel); color: var(--muted); }
+  .chip.on { background: rgba(255, 184, 77, .14); color: var(--amber); }
+  .stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; margin: 14px 0; }
+  .stat b { display: block; font-size: 26px; }
+  .stat span { color: var(--muted); font-size: 12.5px; }
+  h2 { font-size: 15px; margin: 22px 0 10px; color: var(--muted); font-weight: 600; letter-spacing: .03em; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12.5px; padding: 6px 8px; border-bottom: 1px solid var(--edge); }
+  td { padding: 8px; border-bottom: 1px solid var(--edge); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  .r { text-align: right; white-space: nowrap; }
+  .win { color: var(--amber); font-weight: 700; }
+  .ok { color: var(--mint); }
+  .back { margin-bottom: 14px; }
+  .settings { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); gap: 6px 18px; }
+  .setting { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--edge); }
+  .setting b.on { color: var(--amber); } .setting b.off { color: var(--muted); font-weight: 400; }
+  .game { padding: 12px 0; border-bottom: 1px solid var(--edge); }
+  .game:last-child { border-bottom: 0; }
+  .game .head { display: flex; gap: 10px; flex-wrap: wrap; font-weight: 700; }
+  .game .head .total { margin-left: auto; color: var(--cyan); }
+  .game .p { display: flex; justify-content: space-between; padding: 2px 0 2px 14px; font-size: 14px; }
+  .game .p.me { color: var(--amber); }
+  /* Gráfico de cofres por día: una sola serie, barras finas con extremo redondeado. */
+  .chart { position: relative; height: 190px; display: flex; align-items: flex-end; gap: 6px; padding: 20px 0 22px; border-bottom: 1px solid var(--line); }
+  .chart .col { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; position: relative; cursor: default; }
+  .chart .bar { width: min(60%, 34px); background: var(--bar); border-radius: 4px 4px 0 0; min-height: 0; }
+  .chart .col.zero .bar { background: var(--line); height: 2px !important; }
+  .chart .lbl { position: absolute; bottom: -20px; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+  .chart .val { font-size: 11.5px; color: var(--ink); margin-bottom: 3px; }
+  .chart .col:not(.peak):not(.last) .val { visibility: hidden; }
+  .chart .col:hover .val { visibility: visible; }
+  .tip { position: fixed; pointer-events: none; background: #0f141c; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 13px; display: none; z-index: 10; }
+  .err { color: var(--coral); }
+  .note { color: var(--muted); font-size: 12.5px; margin-top: 8px; }
+  @media (max-width: 600px) { header .meta { margin-left: 0; width: 100%; } .member .today { font-size: 24px; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <div class="brand">CONTADOR DE COFRES</div>
+      <h1>Party <span id="code">…</span></h1>
+    </div>
+    <div class="meta"><span id="updated"></span> &nbsp;<button id="reload">⟳ Actualizar</button></div>
+  </header>
+  <div class="tabs" id="tabs"></div>
+  <div id="view"><div class="card muted">Cargando…</div></div>
+</main>
+<div class="tip" id="tip"></div>
+<script>
+'use strict';
+const token = location.pathname.split('/').filter(Boolean).pop() || new URLSearchParams(location.search).get('t') || '';
+let data = null;
+let state = location.hash.startsWith('#m=') ? { tab: 'profile', member: decodeURIComponent(location.hash.slice(3)) }
+  : location.hash === '#juntos' ? { tab: 'together' } : { tab: 'members', member: null };
+
+// ---- Mismas reglas que la app ------------------------------------------------------------------------------
+const BR = /^Playlist_(?:Default(?:Solo|Duo|Trio|Squad)|Trios|Habanero(?:BR_|_NoBuildBR_)?(?:Solo|Duo|Trio|Squad)|NoBuildBR_(?:Solo|Duo|Trio|Squad)|(?:Ranked|RankedNoBuildBR|NoBuildBR_Ranked)_(?:Solo|Duo|Trio|Squad))$/i;
+const isBR = (p) => BR.test(String(p || '').split('/').pop().split('.').pop());
+function mode(p) {
+  if (!p) return 'modo desconocido';
+  const s = p.toLowerCase(), parts = [];
+  if (s.includes('habanero') || s.includes('ranked')) parts.push('Clasificatoria');
+  if (s.includes('nobuild')) parts.push('Cero construcción');
+  if (s.includes('solo')) parts.push('Solo'); else if (s.includes('duo')) parts.push('Dúo');
+  else if (s.includes('trio')) parts.push('Trío'); else if (s.includes('squad')) parts.push('Escuadrón');
+  return parts.length ? parts.join(' · ') : p.replace('Playlist_', '');
+}
+const KIND = { 'Chest': 'Cofre', 'Rare chest': 'Cofre raro', 'Buried chest': 'Cofre enterrado', 'Extraction / relic chest': 'Cofre de extracción / reliquia',
+  'Spirit poster chest': 'Cofre del póster', 'Other chest': 'Otro cofre', 'Ammo box': 'Caja de munición', 'Food box': 'Caja de comida',
+  'Loot cannon': 'Cañón de botín', 'Other container': 'Otro contenedor' };
+const EXTRA = { countAmmoBoxes: 'Ammo box', countFoodBoxes: 'Food box', countLootCannons: 'Loot cannon' };
+// Ajustes que la app sube, con su nombre en la app.
+const SETTINGS = [
+  ['countAmmoBoxes', 'Sumar cajas de munición al total'],
+  ['countFoodBoxes', 'Sumar cajas de comida al total'],
+  ['countLootCannons', 'Sumar cañones de botín al total'],
+  ['countTeammateChests', 'Sumar cofres de compañeros a su total'],
+  ['countTeammateTreasures', 'Sumar tesoros del equipo'],
+  ['showTeammates', 'Compañeros en el informe'],
+  ['tokenCountsTeammates', 'Token con cofres del equipo'],
+  ['countFrom', 'Contar desde'],
+  ['dailyGoal', 'Meta diaria'],
+  ['liveUpdate', 'Contar la partida en curso'],
+];
+
+// ---- Utilidades ------------------------------------------------------------------------------------------
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const N = (n) => Number(n || 0).toLocaleString('es');
+const dayKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+function when(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso), today = new Date(), y = new Date(); y.setDate(y.getDate() - 1);
+  const hm = d.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
+  if (dayKey(d) === dayKey(today)) return 'Hoy ' + hm;
+  if (dayKey(d) === dayKey(y)) return 'Ayer ' + hm;
+  return d.toLocaleDateString('es', { day: 'numeric', month: 'short' }) + ' · ' + hm;
+}
+function ago(iso) {
+  if (!iso) return 'aún no se ha conectado';
+  const m = (Date.now() - new Date(iso)) / 60000;
+  if (m < 1) return 'conectado hace un momento';
+  if (m < 60) return `conectado hace ${Math.floor(m)} min`;
+  if (m < 1440) return `conectado hace ${Math.floor(m / 60)} h`;
+  return `conectado hace ${Math.floor(m / 1440)} d`;
+}
+const place = (p) => !p ? '—' : p === 1 ? '<span class="win">Victoria</span>' : '#' + p;
+
+/** Cofres como los ve esa persona en su app: cofres + las cajas que suma (los cofres de compañeros no se suben). */
+function counted(m, s) {
+  let n = m.chests;
+  for (const [key, kind] of Object.entries(EXTRA)) if (s?.[key]) n += m.kinds?.[kind] || 0;
+  return n;
+}
+const inRange = (m, s) => !s?.countFrom || (m.start && dayKey(new Date(m.start)) >= s.countFrom);
+
+function stats(list, s) {
+  const today = dayKey(new Date());
+  const perDay = {};
+  for (const m of list) if (m.start) { const k = dayKey(new Date(m.start)); perDay[k] = (perDay[k] || 0) + m.chests; }
+  const best = Object.entries(perDay).sort((a, b) => b[1] - a[1])[0];
+  const app = list.filter((m) => inRange(m, s));
+  return {
+    total: list.reduce((a, m) => a + m.chests, 0),
+    totalApp: app.reduce((a, m) => a + counted(m, s), 0),
+    today: perDay[today] || 0,
+    todayApp: app.filter((m) => m.start && dayKey(new Date(m.start)) === today).reduce((a, m) => a + counted(m, s), 0),
+    avg: list.length ? list.reduce((a, m) => a + m.chests, 0) / list.length : 0,
+    bestMatch: list.reduce((a, m) => Math.max(a, m.chests), 0),
+    bestDay: best ? { day: best[0], chests: best[1] } : null,
+    wins: list.filter((m) => m.placement === 1).length,
+    perDay,
+  };
+}
+
+/** Partidas juntos: mismo id de sesión o misma hora de inicio (±90 s) y modo; al menos dos miembros. */
+function together() {
+  const games = [], bySession = {};
+  const list = data.matches.filter((m) => isBR(m.playlist)).slice().sort((a, b) => new Date(a.start || 0) - new Date(b.start || 0));
+  for (const m of list) {
+    let g = bySession[m.session];
+    if (!g && m.start) {
+      const t = new Date(m.start).getTime();
+      g = games.slice(-8).find((x) => !x.some((y) => y.member === m.member)
+        && x.some((y) => y.playlist === m.playlist && y.start && Math.abs(new Date(y.start).getTime() - t) <= 90000));
+    }
+    if (!g) games.push(g = []);
+    if (g.some((y) => y.member === m.member)) continue;
+    g.push(m); bySession[m.session] = g;
+  }
+  return games.filter((g) => g.length >= 2).reverse();
+}
+
+// ---- Vistas --------------------------------------------------------------------------------------------
+const view = document.getElementById('view');
+const byId = () => Object.fromEntries(data.members.map((m) => [m.id, m]));
+const matchesOf = (id) => data.matches.filter((m) => m.member === id && isBR(m.playlist));
+
+function chips(s) {
+  if (!s) return '<div class="chips"><span class="chip">Sin ajustes (versión antigua de la app)</span></div>';
+  const on = [];
+  if (s.countAmmoBoxes) on.push('+ munición'); if (s.countFoodBoxes) on.push('+ comida'); if (s.countLootCannons) on.push('+ cañones');
+  if (s.countTeammateChests) on.push('+ cofres de compañeros');
+  if (s.countFrom) on.push('desde ' + new Date(s.countFrom + 'T00:00').toLocaleDateString('es', { day: 'numeric', month: 'short' }));
+  return '<div class="chips">' + (on.length ? on.map((x) => `<span class="chip on">${esc(x)}</span>`).join('')
+    : '<span class="chip">Cuenta solo cofres</span>') + '</div>';
+}
+
+function renderMembers() {
+  const cards = data.members.map((mem) => {
+    const st = stats(matchesOf(mem.id), mem.settings);
+    return `<div class="card member" data-id="${esc(mem.id)}">
+      <div class="top"><div class="name">${esc(mem.name)}</div><div class="today">${N(st.today)}<small>hoy</small></div></div>
+      <div class="small muted">${N(st.total)} cofres · ${N(matchesOf(mem.id).length)} partidas · media ${st.avg.toFixed(1)}</div>
+      <div class="small muted">${esc(ago(mem.lastSync))}${mem.appVersion ? ' · app ' + esc(mem.appVersion) : ''}</div>
+      ${chips(mem.settings)}
+    </div>`;
+  }).join('');
+  view.innerHTML = `<div class="grid">${cards}</div>
+    <p class="note">Cofres de Battle Royale sacados del propio replay de cada uno (sin cajas): se pueden comparar entre todos.
+    Las etiquetas dicen qué más suma cada uno en su app. Clic en alguien para ver su perfil.</p>`;
+  view.querySelectorAll('.member').forEach((el) => el.onclick = () => { state = { tab: 'profile', member: el.dataset.id }; render(); });
+}
+
+function chart(perDay) {
+  const days = [];
+  for (let i = 13; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); days.push(d); }
+  const vals = days.map((d) => perDay[dayKey(d)] || 0);
+  const max = Math.max(1, ...vals), peak = vals.indexOf(Math.max(...vals));
+  return `<div class="chart" role="img" aria-label="Cofres por día, últimos 14 días">` + days.map((d, i) => {
+    const h = (vals[i] / max * 100).toFixed(1);
+    const label = d.toLocaleDateString('es', { weekday: 'short', day: 'numeric' });
+    return `<div class="col${vals[i] ? '' : ' zero'}${i === peak && vals[i] ? ' peak' : ''}${i === 13 ? ' last' : ''}" data-tip="${esc(d.toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' }))}: ${N(vals[i])} cofres">
+      <div class="val">${N(vals[i])}</div><div class="bar" style="height:${h}%"></div>
+      <div class="lbl">${esc(i % 2 === 1 || i === 13 ? label : '')}</div></div>`;
+  }).join('') + '</div>';
+}
+
+function renderProfile(id) {
+  const mem = byId()[id];
+  if (!mem) { state = { tab: 'members' }; return render(); }
+  const s = mem.settings, list = matchesOf(id), st = stats(list, s);
+  const names = byId();
+  const games = together();
+  const withWhom = {};
+  for (const g of games) { const me = g.find((x) => x.member === id); if (me) withWhom[me.session] = g.filter((x) => x.member !== id); }
+  const settingRows = SETTINGS.map(([key, label]) => {
+    let v = s?.[key];
+    let txt = v === true ? 'Sí' : v === false || v == null || v === '' || v === 0 ? 'No' : String(v);
+    if (key === 'countFrom' && v) txt = new Date(v + 'T00:00').toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' });
+    if (key === 'dailyGoal' && v) txt = N(v) + ' cofres';
+    const on = !(v === false || v == null || v === '' || v === 0);
+    return `<div class="setting"><span>${esc(label)}</span><b class="${on ? 'on' : 'off'}">${esc(txt)}</b></div>`;
+  }).join('');
+  const rows = list.slice(0, 150).map((m) => {
+    const others = withWhom[m.session] || [];
+    const kinds = Object.entries(m.kinds || {}).map(([k, n]) => `${KIND[k] || k}: ${n}`).join(' · ');
+    const app = counted(m, s);
+    return `<tr><td>${esc(when(m.start))}<div class="small muted">${esc(mode(m.playlist))}</div></td><td>${place(m.placement)}</td>
+      <td class="r" title="${esc(kinds)}"><b>${N(m.chests)}</b></td>
+      <td class="r ${app !== m.chests ? '' : 'muted'}">${N(app)}</td>
+      <td class="small">${others.map((o) => `${esc(names[o.member]?.name)} <span class="ok">✓ ${N(o.chests)}</span>`).join('<br>') || '<span class="muted">—</span>'}</td></tr>`;
+  }).join('');
+  view.innerHTML = `<button class="back" id="back">← Miembros</button>
+    <div class="card">
+      <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap"><h1 style="margin:0;font-size:24px">${esc(mem.name)}</h1>
+      <span class="muted small">${esc(ago(mem.lastSync))}${mem.appVersion ? ' · app ' + esc(mem.appVersion) : ''}</span></div>
+      <div class="stats">
+        <div class="stat"><b style="color:var(--cyan)">${N(st.total)}</b><span>cofres en total (solo cofres)</span></div>
+        <div class="stat"><b>${N(st.totalApp)}</b><span>como lo ve en su app</span></div>
+        <div class="stat"><b>${N(st.today)}</b><span>hoy${st.todayApp !== st.today ? ` · ${N(st.todayApp)} en su app` : ''}</span></div>
+        <div class="stat"><b>${st.avg.toFixed(1)}</b><span>media por partida</span></div>
+        <div class="stat"><b style="color:var(--amber)">${N(st.bestMatch)}</b><span>mejor partida</span></div>
+        <div class="stat"><b>${st.bestDay ? N(st.bestDay.chests) : '—'}</b><span>mejor día${st.bestDay ? ' (' + esc(new Date(st.bestDay.day + 'T00:00').toLocaleDateString('es', { day: 'numeric', month: 'short' })) + ')' : ''}</span></div>
+        <div class="stat"><b>${N(list.length)}</b><span>partidas · ${N(st.wins)} victorias</span></div>
+      </div>
+    </div>
+    <h2>COFRES POR DÍA · ÚLTIMOS 14 DÍAS</h2>
+    <div class="card">${chart(st.perDay)}</div>
+    <h2>AJUSTES DE SU APP</h2>
+    <div class="card">${s ? `<div class="settings">${settingRows}</div>` : '<span class="muted">Aún no ha subido sus ajustes (necesita la versión 2.3.0 o posterior).</span>'}
+      <p class="note">«Como lo ve en su app» suma las cajas que tenga activadas y respeta «Contar desde». Si suma los cofres de sus compañeros, eso no se puede reproducir aquí: cada uno sube solo lo suyo.</p></div>
+    <h2>PARTIDAS</h2>
+    <div class="card" style="overflow-x:auto"><table>
+      <thead><tr><th>Cuándo</th><th>Puesto</th><th class="r">Cofres</th><th class="r">En su app</th><th>Con (party)</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="5" class="muted">Sin partidas subidas.</td></tr>'}</tbody></table>
+      ${list.length > 150 ? '<p class="note">Las 150 más recientes.</p>' : ''}</div>`;
+  document.getElementById('back').onclick = () => { state = { tab: 'members' }; render(); };
+  bindTips();
+}
+
+function renderTogether() {
+  const names = byId(), games = together();
+  const sum = {};
+  for (const g of games) for (const m of g) sum[m.member] = (sum[m.member] || 0) + m.chests;
+  const summary = Object.entries(sum).sort((a, b) => b[1] - a[1]).map(([id, n]) => `${esc(names[id]?.name)} <b>${N(n)}</b>`).join(' &nbsp;·&nbsp; ');
+  view.innerHTML = games.length === 0
+    ? '<div class="card muted">Aún no hay partidas juntos. Salen aquí cuando al menos dos miembros juegan la misma partida y la suben.</div>'
+    : `<div class="card small" style="margin-bottom:14px">${N(games.length)} partidas juntos: &nbsp;${summary}</div>
+      <div class="card">${games.slice(0, 100).map((g) => {
+        const total = g.reduce((a, m) => a + m.chests, 0);
+        const first = g[0];
+        return `<div class="game"><div class="head"><span>${esc(when(first.start))}</span><span class="muted">${esc(mode(first.playlist))}</span>
+          <span>${place(g.find((x) => x.placement)?.placement)}</span><span class="total">equipo ${N(total)}</span></div>
+          ${g.slice().sort((a, b) => b.chests - a.chests).map((m) => `<div class="p"><span>${esc(names[m.member]?.name)}</span><b class="ok">✓ ${N(m.chests)}</b></div>`).join('')}</div>`;
+      }).join('')}</div>
+      <p class="note">Solo los miembros de la party (sus cofres exactos, de su propio replay). Los randoms solo se ven en la app de quien jugó con ellos.</p>`;
+}
+
+function render() {
+  const hash = state.tab === 'profile' ? '#m=' + encodeURIComponent(state.member) : state.tab === 'together' ? '#juntos' : '';
+  if (location.hash !== hash) history.replaceState(null, '', location.pathname + hash);
+  document.getElementById('code').textContent = data.code;
+  const tabs = [['members', `Miembros (${data.members.length})`], ['together', `Partidas juntos (${together().length})`]];
+  document.getElementById('tabs').innerHTML = tabs.map(([k, t]) => `<button class="tab${state.tab === k || (k === 'members' && state.tab === 'profile') ? ' on' : ''}" data-tab="${k}">${esc(t)}</button>`).join('');
+  document.querySelectorAll('.tab').forEach((b) => b.onclick = () => { state = { tab: b.dataset.tab }; render(); });
+  if (state.tab === 'profile') renderProfile(state.member);
+  else if (state.tab === 'together') renderTogether();
+  else renderMembers();
+}
+
+const tip = document.getElementById('tip');
+function bindTips() {
+  view.querySelectorAll('[data-tip]').forEach((el) => {
+    el.onmousemove = (e) => { tip.textContent = el.dataset.tip; tip.style.display = 'block'; tip.style.left = (e.clientX + 14) + 'px'; tip.style.top = (e.clientY - 34) + 'px'; };
+    el.onmouseleave = () => tip.style.display = 'none';
+  });
+}
+
+async function load() {
+  try {
+    const r = await fetch('/api/view?t=' + encodeURIComponent(token), { cache: 'no-store' });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || 'Error ' + r.status);
+    data = j;
+    document.getElementById('updated').textContent = 'Actualizado ' + new Date().toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
+    render();
+  } catch (e) {
+    view.innerHTML = `<div class="card err">${esc(e.message)}</div><p class="note">Abre esta página desde la app: botón Party → «Ver en la web».</p>`;
+  }
+}
+document.getElementById('reload').onclick = load;
+load();
+setInterval(load, 60000);
+</script>
+</body>
+</html>

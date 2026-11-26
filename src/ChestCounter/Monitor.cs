@@ -626,7 +626,7 @@ public sealed class Monitor
             // Party: sube tus partidas y pon los cofres exactos de tus compañeros en vez del «N+».
             try
             {
-                if (Party.Tick(_data))
+                if (Party.Tick(_data, _config))
                 {
                     _store.SaveData(_data);
                     _reportRequested = true;

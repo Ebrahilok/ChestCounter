@@ -243,6 +243,7 @@ internal static class Program
             new PartyMemberView("Amigo2", false, null, 0, 0, 0, 0),
         }, DateTime.UtcNow, null, false)
         {
+            WebUrl = "https://chestcounter-party.vercel.app/p/ejemplo",
             Games = new[]
             {
                 new PartyGame(DateTime.UtcNow.AddMinutes(-20), "Squads", 1, new[]

@@ -40,6 +40,8 @@ public sealed class PartyState
     public string? Since { get; set; }
     public DateTime? LastSyncUtc { get; set; }
     public List<PartyMember> Members { get; set; } = new();
+    /// <summary>Enlace secreto de la web de la party (`/p/{token}`), o null con un servidor antiguo.</summary>
+    public string? ViewToken { get; set; }
     public List<PartyMatch> Matches { get; set; } = new();
     /// <summary>Partidas propias ya subidas (session id → firma): solo se vuelve a subir lo que cambia.</summary>
     public Dictionary<string, string> Uploaded { get; set; } = new();
@@ -54,6 +56,9 @@ public sealed record PartyMemberView(string Name, bool IsMe, DateTime? LastSync,
 /// <summary>Estado de la party para la ventana (null = sin party).</summary>
 public sealed record PartyView(string Code, IReadOnlyList<PartyMemberView> Members, DateTime? LastSyncUtc, string? Error, bool Syncing)
 {
+    /// <summary>Web de la party (perfiles, partidas juntos y los ajustes de cada uno), o null si aún no se conoce.</summary>
+    public string? WebUrl { get; init; }
+
     /// <summary>Partidas en las que jugaron juntos al menos dos miembros de la party, la más reciente primero.</summary>
     public IReadOnlyList<PartyGame> Games { get; init; } = Array.Empty<PartyGame>();
 }
@@ -164,7 +169,7 @@ public sealed class Party
         {
             _state = new PartyState
             {
-                Server = server, Code = result.Party.Code, MemberId = result.MemberId, Secret = result.Secret,
+                Server = server, Code = result.Party.Code, MemberId = result.MemberId, Secret = result.Secret, ViewToken = result.Party.ViewToken,
                 MyEpicId = epicId, MyName = name, Members = result.Party.Members,
             };
             SaveState();
@@ -205,8 +210,9 @@ public sealed class Party
     /// Llamado en cada vuelta del hilo de vigilancia (el único que toca <paramref name="data"/>): lanza la sincronización
     /// cuando toca y aplica lo descargado a los compañeros de tus partidas. Devuelve true si cambió algún número.
     /// </summary>
-    public bool Tick(TrackerData data)
+    public bool Tick(TrackerData data, Config? config = null)
     {
+        if (config != null) _settings = Settings(config);
         PartyState s;
         lock (_gate) s = _state;
         if (!s.Joined)
@@ -282,7 +288,7 @@ public sealed class Party
             {
                 var chunk = chunks[i];
                 var (result, error, status) = await PostAsync<SyncResult>(s.Server, "api/sync",
-                    new { memberId = s.MemberId, secret = s.Secret, since, matches = chunk.Select(u => u.Body) });
+                    new { memberId = s.MemberId, secret = s.Secret, since, matches = chunk.Select(u => u.Body), settings = _settings, appVersion = AppInfo.VersionText });
                 if (result == null)
                 {
                     if (status == 401)
@@ -319,6 +325,7 @@ public sealed class Party
                     var ids = result.Party.Members.Select(x => x.Id).ToHashSet();
                     cur.Matches = byKey.Values.Where(x => ids.Contains(x.MemberId)).ToList();
                     cur.Members = result.Party.Members;
+                    cur.ViewToken = result.Party.ViewToken ?? cur.ViewToken;
                     cur.LastSyncUtc = DateTime.UtcNow;
                     // Solo con el último trozo: los anteriores ya trajeron todo lo cambiado hasta su hora.
                     if (i == chunks.Count - 1) cur.Since = result.ServerTime;
@@ -424,7 +431,10 @@ public sealed class Party
             })
                 .OrderByDescending(r => r.Today).ThenByDescending(r => r.Total)
                 .ToList();
-            return new PartyView(s.Code!, rows, s.LastSyncUtc, _error, _inFlight is { IsCompleted: false }) { Games = Games(s) };
+            return new PartyView(s.Code!, rows, s.LastSyncUtc, _error, _inFlight is { IsCompleted: false }) {
+                Games = Games(s),
+                WebUrl = s.ViewToken is { Length: > 0 } t ? s.Server.TrimEnd('/') + "/p/" + Uri.EscapeDataString(t) : null,
+            };
         }
     }
 
@@ -507,9 +517,27 @@ public sealed class Party
 
     private sealed record UploadMatch(string SessionId, DateTime? StartUtc, int Chests, Dictionary<string, int> Kinds, string? Playlist, int? Placement);
 
+    /// <summary>Ajustes que se ven en la web de la party: qué suma cada uno a su total (sus cifras no son comparables si no).</summary>
+    private volatile Dictionary<string, object>? _settings;
+
+    private static Dictionary<string, object> Settings(Config c) => new()
+    {
+        ["countAmmoBoxes"] = c.CountAmmoBoxes,
+        ["countFoodBoxes"] = c.CountFoodBoxes,
+        ["countLootCannons"] = c.CountLootCannons,
+        ["countTeammateChests"] = c.CountTeammateChests,
+        ["countTeammateTreasures"] = c.CountTeammateTreasures,
+        ["showTeammates"] = c.ShowTeammates,
+        ["tokenCountsTeammates"] = c.TokenCountsTeammates,
+        ["countFrom"] = c.CountFrom is { } from ? from.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) : "",
+        ["dailyGoal"] = c.DailyGoal,
+        ["liveUpdate"] = c.LiveUpdate,
+    };
+
     private sealed class PartyInfo
     {
         public string Code { get; set; } = "";
+        public string? ViewToken { get; set; }
         public List<PartyMember> Members { get; set; } = new();
     }
 

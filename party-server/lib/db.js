@@ -37,6 +37,28 @@ async function init() {
     updated_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (member_id, session_id))`;
   await sql`CREATE INDEX IF NOT EXISTS matches_updated ON matches (updated_at)`;
+  // Web de la party: enlace secreto por party; ajustes y versión de la app de cada miembro.
+  await sql`ALTER TABLE parties ADD COLUMN IF NOT EXISTS view_token text UNIQUE`;
+  await sql`ALTER TABLE members ADD COLUMN IF NOT EXISTS settings jsonb`;
+  await sql`ALTER TABLE members ADD COLUMN IF NOT EXISTS app_version text`;
+  for (const p of await sql`SELECT code FROM parties WHERE view_token IS NULL`) {
+    await sql`UPDATE parties SET view_token = ${newViewToken()} WHERE code = ${p.code} AND view_token IS NULL`;
+  }
+}
+
+/** Enlace de la web de la party (largo: no se puede adivinar, a diferencia del código de 6 letras). */
+export const newViewToken = () => randomBytes(18).toString('base64url');
+
+/** Ajustes que la app manda para mostrarlos en la web: solo claves cortas con valores simples. */
+export function cleanSettings(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const out = {};
+  for (const [k, v] of Object.entries(value).slice(0, 30)) {
+    if (k.length > 40) continue;
+    if (typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v))) out[k] = v;
+    else if (typeof v === 'string' && v.length <= 40) out[k] = v;
+  }
+  return out;
 }
 
 export class HttpError extends Error {
@@ -91,12 +113,15 @@ export function route(fn) {
 
 /** La party y sus miembros, como la ve cada miembro. */
 export async function partyView(sql, partyCode) {
-  const members = await sql`SELECT id, epic_id, name, joined_at, last_sync FROM members
+  const members = await sql`SELECT id, epic_id, name, joined_at, last_sync, settings, app_version FROM members
     WHERE party_code = ${partyCode} ORDER BY joined_at`;
+  const party = await sql`SELECT view_token FROM parties WHERE code = ${partyCode}`;
   return {
     code: partyCode,
+    viewToken: party[0]?.view_token ?? null,
     members: members.map((m) => ({
       id: m.id, epicId: m.epic_id, name: m.name, joinedAt: m.joined_at, lastSync: m.last_sync,
+      settings: m.settings, appVersion: m.app_version,
     })),
   };
 }
