@@ -202,20 +202,20 @@ internal static class Program
         var partyView = new PartyView("YP5A7X", new[]
         {
             new PartyMemberView("Ebrahilok", true, DateTime.UtcNow, 112, 4821, 179, 0),
-            new PartyMemberView("TlaxcalaStudios", false, DateTime.UtcNow.AddMinutes(-3), 87, 2210, 95, 41),
-            new PartyMemberView("Amigo3", false, null, 0, 0, 0, 0),
+            new PartyMemberView("Amigo1", false, DateTime.UtcNow.AddMinutes(-3), 87, 2210, 95, 41),
+            new PartyMemberView("Amigo2", false, null, 0, 0, 0, 0),
         }, DateTime.UtcNow, null, false)
         {
             Games = new[]
             {
                 new PartyGame(DateTime.UtcNow.AddMinutes(-20), "Squads", 1, new[]
                 {
-                    new PartyGamePlayer("Ebrahilok", 31, true, true, true), new PartyGamePlayer("TlaxcalaStudios", 19, false, true, true),
-                    new PartyGamePlayer("RandomGuy", 4, false, false, false),
+                    new PartyGamePlayer("Ebrahilok", 31, true, true, true), new PartyGamePlayer("Amigo1", 19, false, true, true),
+                    new PartyGamePlayer("Jugador_random", 4, false, false, false),
                 }),
                 new PartyGame(DateTime.UtcNow.AddDays(-1), "Zero Build · Duos", 7, new[]
                 {
-                    new PartyGamePlayer("Ebrahilok", 22, true, true, true), new PartyGamePlayer("Amigo3", 6, false, false, true),
+                    new PartyGamePlayer("Ebrahilok", 22, true, true, true), new PartyGamePlayer("Amigo2", 6, false, false, true),
                 }),
             },
         };

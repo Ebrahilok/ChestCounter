@@ -148,8 +148,13 @@ To get a teammate's exact figures, they'd have to run the counter with **their o
 - Every member **uploads the chests from their own replay** (exact, like yours) to a shared server, after every match and every minute while the counter is open. Matches you already had are uploaded when you join.
 - In the matches you played together, a teammate who is in the party shows their **exact** number with a **✓** ("✓ 19") instead of "11+". If the whole team is in the party, the team total is exact too ("team ✓ 73"). Random teammates keep their observed minimum ("4+").
 - The match is recognised by its session id (the same for every player in it) and, failing that, by its start time (±90 s).
-- The **Party** window lists every member with their chests **today**, in **total**, how many matches they uploaded and in how many of yours their number is already exact.
-- Everyone needs this version. If a friend plays with the counter closed, their matches are uploaded the next time they open it (while Fortnite keeps the replays). Until then you see "N+".
+- The **Party** window has two tabs:
+  - **Party status**: every member with their chests **today**, in **total**, how many matches they uploaded, in how many of yours their number is already exact and when they last connected.
+  - **Matches together**: every match where at least two party members played together, **even with a random in the team**: when, mode, placement, team total and each player's chests (you, your friends with **✓** and randoms with their minimum "4+"; a friend who hasn't uploaded it yet shows "+" until they do). On top, each player's chests summed over all those matches.
+
+<p align="center"><img src="docs/party-status.png" alt="Party: status" width="49%">&nbsp;<img src="docs/party-matches.png" alt="Party: matches together" width="49%"></p>
+
+- Everyone needs **version 2.2.0 or later**. If a friend plays with the counter closed, their matches are uploaded the next time they open it (while Fortnite keeps the replays). Until then you see "N+".
 - Only figures are uploaded: match id, time, mode, placement and chests by kind, with your name and Epic id. **Leave party** deletes what you uploaded from the server; the exact numbers you already have stay in your history.
 
 The server lives in [`party-server/`](party-server) (Vercel functions + Neon Postgres): `https://chestcounter-party.vercel.app`.

@@ -153,8 +153,13 @@ Botón **Party** de la ventana principal. Uno **crea** la party y pasa el códig
 - Cada miembro **sube los cofres de su propio replay** (los suyos son exactos, como los tuyos) a un servidor común, al terminar cada partida y cada minuto mientras el contador está abierto. Al entrar se suben también las partidas que ya tenías.
 - En las partidas en las que jugasteis juntos, el compañero que está en la party sale con su número **exacto** y una **✓** («✓ 19») en vez de «11+». Si todo el equipo está en la party, el total del equipo también es exacto («equipo ✓ 73»). Los compañeros aleatorios siguen con su mínimo observado («4+»).
 - La partida se reconoce por su id de sesión (el mismo para todos los jugadores de esa partida) y, si no coincide, por la hora de inicio (±90 s).
-- La ventana **Party** muestra a cada miembro con sus cofres de **hoy**, en **total**, cuántas partidas subió y en cuántas tuyas su número ya es exacto.
-- Todos tenéis que usar esta versión. Si un amigo juega con el contador cerrado, sus partidas se suben la próxima vez que lo abra (mientras Fortnite conserve los replays). Hasta entonces sale «N+».
+- La ventana **Party** tiene dos pestañas:
+  - **Estado de la party**: cada miembro con sus cofres de **hoy**, en **total**, cuántas partidas subió, en cuántas tuyas su número ya es exacto y cuándo se conectó por última vez.
+  - **Partidas juntos**: todas las partidas en las que coincidieron al menos dos miembros de la party, **aunque hubiera un random**: cuándo, modo, puesto, total del equipo y los cofres de cada uno (tú, tus amigos con **✓** y los randoms con su mínimo «4+»; un amigo que aún no la subió sale con «+» hasta que la suba). Arriba, la suma de cofres de cada uno en todas esas partidas.
+
+<p align="center"><img src="docs/party-estado.png" alt="Party: estado" width="49%">&nbsp;<img src="docs/party-partidas.png" alt="Party: partidas juntos" width="49%"></p>
+
+- Todos tenéis que usar la **versión 2.2.0 o posterior**. Si un amigo juega con el contador cerrado, sus partidas se suben la próxima vez que lo abra (mientras Fortnite conserve los replays). Hasta entonces sale «N+».
 - Se suben solo cifras: id de la partida, hora, modo, puesto y cofres por tipo, con tu nombre y tu id de Epic. **Salir de la party** borra del servidor lo que subiste; los números exactos que ya tienes se quedan en tu historial.
 
 El servidor está en [`party-server/`](party-server) (funciones de Vercel + Postgres de Neon): `https://chestcounter-party.vercel.app`.
